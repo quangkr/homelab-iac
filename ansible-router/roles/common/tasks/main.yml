@@ -1,0 +1,30 @@
+---
+- name: Ensure UCI staging directory exists
+  file:
+    path: /etc/ansible_uci
+    state: directory
+    mode: '0700'
+
+- name: Disable conflicting pre-installed adblock services
+  raw: |
+    for svc in adblock adblock-fast simple-adblock; do
+      if [ -x "/etc/init.d/$svc" ]; then
+        /etc/init.d/$svc stop || true
+        /etc/init.d/$svc disable || true
+      fi
+    done
+  changed_when: false
+
+- name: Deploy Common System & Bridge-VLAN UCI Script
+  template:
+    src: uci_common.j2
+    dest: /etc/ansible_uci/01_common.uci
+    mode: '0600'
+  register: uci_common
+
+- name: Apply Common System & Bridge-VLAN UCI Script
+  raw: "uci -q batch < /etc/ansible_uci/01_common.uci && uci commit system && uci commit network"
+  when: uci_common.changed
+  notify:
+    - reload_system
+    - restart_network_safe

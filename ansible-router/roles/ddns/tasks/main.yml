@@ -1,0 +1,29 @@
+---
+- name: Install Cloudflare DDNS packages
+  opkg:
+    name:
+      - ddns-scripts
+      - ddns-scripts-cloudflare
+      - curl
+      - ca-bundle
+    state: present
+    update_cache: yes
+
+- name: Deploy DDNS UCI Script
+  template:
+    src: uci_ddns.j2
+    dest: /etc/ansible_uci/04_ddns.uci
+    mode: '0600'
+  register: uci_ddns
+
+- name: Apply DDNS UCI Script
+  raw: "uci -q batch < /etc/ansible_uci/04_ddns.uci && uci commit ddns"
+  when: uci_ddns.changed
+  notify:
+    - restart_ddns
+
+- name: Enable and start DDNS service
+  service:
+    name: ddns
+    enabled: yes
+    state: started

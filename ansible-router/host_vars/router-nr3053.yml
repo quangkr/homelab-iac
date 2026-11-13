@@ -1,0 +1,58 @@
+---
+# Connection IP (use ansible_host to connect during initial setup or role transitions)
+ansible_host: 192.168.10.1
+hardware_model: "Viettel NR3053"
+
+# Toggle this between true (Role 2: Core + Wireless) and false (Role 1: Wired-Only Core)
+wireless_enabled: true
+
+# If converted to a Dumb AP later, it will use this IP suffix (192.168.10.9) and bridge all ports
+ap_ip_suffix: 9
+
+wan_port: "wan"
+wan_vlan_tag: none
+lan_ports:
+  - "lan1"
+  - "lan2"
+  - "lan3"
+all_ports:
+  - "wan"
+  - "lan1"
+  - "lan2"
+  - "lan3"
+port_vlans:
+  # examples
+  # lan1:                       # Pure tagged trunk (no untagged traffic): pvid: none + tagged: "all"
+  #   pvid: none
+  #   tagged: "all"
+  # lan1:                       # Hybrid trunk: pvid: <vlan_id> + tagged: "all"
+  #   pvid: 10
+  #   tagged: "all"
+  # lan1:                       # Hybrid trunk: pvid: <vlan_id> + tagged: a specific list like [10, 20]
+  #   pvid: 10
+  #   tagged: [20,30]
+  # lan1:                       # Pure access port (untagged only): pvid: <vlan_id> + tagged: []
+  #   pvid: 10
+  #   tagged: []
+  wan:
+    pvid: 10
+    tagged: "all"
+  lan1:
+    pvid: 10
+    tagged: "all"
+  lan2:
+    pvid: 10
+    tagged: "all"
+  lan3:
+    pvid: 10
+    tagged: "all"
+
+radios:
+  ra0:
+    band: "2g"
+    channel: "auto"
+    htmode: "HE40"
+  rax0:
+    band: "5g"
+    channel: "auto"
+    htmode: "HE160"

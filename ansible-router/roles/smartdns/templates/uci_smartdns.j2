@@ -1,0 +1,38 @@
+# Move dnsmasq off port 53 to port 5353 so SmartDNS can bind port 53 directly
+set dhcp.@dnsmasq[0].port='5353'
+
+# Wipe existing SmartDNS config
+while uci -q delete smartdns.@smartdns[0]; do :; done
+while uci -q delete smartdns.@server[0]; do :; done
+
+set smartdns.main=smartdns
+set smartdns.main.enabled='1'
+set smartdns.main.server_name='smartdns'
+set smartdns.main.port='53'
+set smartdns.main.auto_set_dnsmasq='0'
+set smartdns.main.tcp_server='1'
+set smartdns.main.ipv6_server='1'
+set smartdns.main.dualstack_ip_selection='1'
+set smartdns.main.prefetch_domain='1'
+set smartdns.main.serve_expired='1'
+set smartdns.main.cache_size='16384'
+add_list smartdns.main.conf_files='/etc/smartdns/custom.conf'
+
+# Upstream 1: Quad9 DoT (9.9.9.9)
+set smartdns.quad9_dot=server
+set smartdns.quad9_dot.enabled='1'
+set smartdns.quad9_dot.name='Quad9_DoT'
+set smartdns.quad9_dot.ip='9.9.9.9'
+set smartdns.quad9_dot.port='853'
+set smartdns.quad9_dot.type='tls'
+set smartdns.quad9_dot.tls_host_verify='dns.quad9.net'
+set smartdns.quad9_dot.http_host='dns.quad9.net'
+
+# Upstream 2: Quad9 DoH (9.9.9.9)
+set smartdns.quad9_doh=server
+set smartdns.quad9_doh.enabled='1'
+set smartdns.quad9_doh.name='Quad9_DoH'
+set smartdns.quad9_doh.ip='https://9.9.9.9/dns-query'
+set smartdns.quad9_doh.type='https'
+set smartdns.quad9_doh.tls_host_verify='dns.quad9.net'
+set smartdns.quad9_doh.http_host='dns.quad9.net'

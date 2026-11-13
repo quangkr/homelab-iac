@@ -1,0 +1,224 @@
+# ==========================================
+# 1. NETWORK (WAN & VLAN Interfaces)
+# ==========================================
+delete network.wan
+delete network.wan6
+set network.wan=interface
+{% if wan_vlan_tag is defined and wan_vlan_tag != 'none' %}
+set network.wan.device='{{ wan_port }}.{{ wan_vlan_tag }}'
+{% else %}
+set network.wan.device='{{ wan_port }}'
+{% endif %}
+set network.wan.proto='pppoe'
+set network.wan.username='{{ vault_pppoe_user }}'
+set network.wan.password='{{ vault_pppoe_pass }}'
+set network.wan.ipv6='manual'
+set network.wan6=interface
+set network.wan6.device='@wan'
+set network.wan6.proto='dhcpv6'
+set network.wan6.reqaddress='try'
+set network.wan6.reqprefix='auto'
+
+{% for vlan in vlans %}
+delete network.{{ vlan.name }}
+set network.{{ vlan.name }}=interface
+set network.{{ vlan.name }}.device='br-lan.{{ vlan.id }}'
+set network.{{ vlan.name }}.proto='static'
+set network.{{ vlan.name }}.ipaddr='{{ vlan.subnet_prefix }}.{{ ip_suffix }}'
+set network.{{ vlan.name }}.netmask='{{ vlan.netmask }}'
+set network.{{ vlan.name }}.ip6assign='{{ vlan.ip6assign }}'
+set network.{{ vlan.name }}.ip6hint='{{ vlan.ip6hint }}'
+{% endfor %}
+
+# ==========================================
+# 2. DHCP & ODHCPD
+# ==========================================
+set dhcp.@dnsmasq[0].domainneeded='1'
+set dhcp.@dnsmasq[0].localise_queries='1'
+set dhcp.@dnsmasq[0].rebind_protection='1'
+set dhcp.@dnsmasq[0].rebind_localhost='1'
+set dhcp.@dnsmasq[0].local='/lan/'
+set dhcp.@dnsmasq[0].domain='lan'
+set dhcp.@dnsmasq[0].expandhosts='1'
+set dhcp.@dnsmasq[0].authoritative='1'
+set dhcp.@dnsmasq[0].readethers='1'
+set dhcp.@dnsmasq[0].leasefile='/tmp/dhcp.leases'
+
+{% for vlan in vlans %}
+delete dhcp.{{ vlan.name }}
+set dhcp.{{ vlan.name }}=dhcp
+set dhcp.{{ vlan.name }}.interface='{{ vlan.name }}'
+set dhcp.{{ vlan.name }}.start='100'
+set dhcp.{{ vlan.name }}.limit='150'
+set dhcp.{{ vlan.name }}.leasetime='12h'
+set dhcp.{{ vlan.name }}.dhcpv6='server'
+set dhcp.{{ vlan.name }}.ra='server'
+set dhcp.{{ vlan.name }}.ra_slaac='1'
+add_list dhcp.{{ vlan.name }}.ra_flags='managed-config'
+add_list dhcp.{{ vlan.name }}.ra_flags='other-config'
+{% endfor %}
+
+# ==========================================
+# 3. FIREWALL (Zones, Matrix & Port Forwards)
+# ==========================================
+# Wipe existing firewall rules cleanly before rebuilding
+{% for section in ['defaults', 'zone', 'forwarding', 'rule', 'redirect'] %}
+while uci -q delete firewall.@{{ section }}[0]; do :; done
+{% endfor %}
+
+set firewall.defaults=defaults
+set firewall.defaults.syn_flood='1'
+set firewall.defaults.input='REJECT'
+set firewall.defaults.output='ACCEPT'
+set firewall.defaults.forward='REJECT'
+set firewall.defaults.flow_offloading='1'
+
+# --- Zones ---
+# Zone: WAN
+set firewall.zone_wan=zone
+set firewall.zone_wan.name='wan'
+set firewall.zone_wan.input='REJECT'
+set firewall.zone_wan.output='ACCEPT'
+set firewall.zone_wan.forward='REJECT'
+set firewall.zone_wan.masq='1'
+set firewall.zone_wan.mtu_fix='1'
+add_list firewall.zone_wan.network='wan'
+add_list firewall.zone_wan.network='wan6'
+
+# Zone: VLAN 10 (LAN / Management) + WireGuard
+set firewall.zone_lan=zone
+set firewall.zone_lan.name='lan'
+set firewall.zone_lan.input='ACCEPT'
+set firewall.zone_lan.output='ACCEPT'
+set firewall.zone_lan.forward='ACCEPT'
+add_list firewall.zone_lan.network='lan'
+
+# Zone: VLAN 20 (Lab)
+set firewall.zone_lab=zone
+set firewall.zone_lab.name='lab'
+set firewall.zone_lab.input='REJECT'
+set firewall.zone_lab.output='ACCEPT'
+set firewall.zone_lab.forward='REJECT'
+add_list firewall.zone_lab.network='lab'
+
+# Zone: VLAN 30 (Guest / Family)
+set firewall.zone_guest=zone
+set firewall.zone_guest.name='guest'
+set firewall.zone_guest.input='REJECT'
+set firewall.zone_guest.output='ACCEPT'
+set firewall.zone_guest.forward='REJECT'
+add_list firewall.zone_guest.network='guest'
+
+# Zone: VLAN 40 (IoT Offline)
+set firewall.zone_iot=zone
+set firewall.zone_iot.name='iot'
+set firewall.zone_iot.input='REJECT'
+set firewall.zone_iot.output='ACCEPT'
+set firewall.zone_iot.forward='REJECT'
+add_list firewall.zone_iot.network='iot'
+
+# Zone: VLAN 41 (IoT Internet)
+set firewall.zone_iot_pub=zone
+set firewall.zone_iot_pub.name='iot_pub'
+set firewall.zone_iot_pub.input='REJECT'
+set firewall.zone_iot_pub.output='ACCEPT'
+set firewall.zone_iot_pub.forward='REJECT'
+add_list firewall.zone_iot_pub.network='iot_pub'
+
+# --- Inter-VLAN Forwarding Matrix ---
+# VLAN 10 (lan): Full Access to all VLANs and WAN
+{% for dst in ['wan', 'lab', 'guest', 'iot', 'iot_pub'] %}
+set firewall.fwd_lan_{{ dst }}=forwarding
+set firewall.fwd_lan_{{ dst }}.src='lan'
+set firewall.fwd_lan_{{ dst }}.dest='{{ dst }}'
+{% endfor %}
+
+# VLAN 20 (lab): Can access Internet, no access to other VLANs
+set firewall.fwd_lab_wan=forwarding
+set firewall.fwd_lab_wan.src='lab'
+set firewall.fwd_lab_wan.dest='wan'
+
+# VLAN 30 (guest): Can access Internet & Lab VLAN
+set firewall.fwd_guest_wan=forwarding
+set firewall.fwd_guest_wan.src='guest'
+set firewall.fwd_guest_wan.dest='wan'
+set firewall.fwd_guest_lab=forwarding
+set firewall.fwd_guest_lab.src='guest'
+set firewall.fwd_guest_lab.dest='lab'
+
+# VLAN 40 (iot): No Internet, Can access Lab VLAN
+set firewall.fwd_iot_lab=forwarding
+set firewall.fwd_iot_lab.src='iot'
+set firewall.fwd_iot_lab.dest='lab'
+
+# VLAN 41 (iot_pub): Can access Internet & Lab VLAN
+set firewall.fwd_iot_pub_wan=forwarding
+set firewall.fwd_iot_pub_wan.src='iot_pub'
+set firewall.fwd_iot_pub_wan.dest='wan'
+set firewall.fwd_iot_pub_lab=forwarding
+set firewall.fwd_iot_pub_lab.src='iot_pub'
+set firewall.fwd_iot_pub_lab.dest='lab'
+
+# --- Essential DHCP & DNS Input Rules for Restricted Zones ---
+{% for z in ['lab', 'guest', 'iot', 'iot_pub'] %}
+set firewall.allow_dhcp_{{ z }}=rule
+set firewall.allow_dhcp_{{ z }}.name='Allow-DHCP-{{ z }}'
+set firewall.allow_dhcp_{{ z }}.src='{{ z }}'
+set firewall.allow_dhcp_{{ z }}.proto='udp'
+set firewall.allow_dhcp_{{ z }}.dest_port='67-68 546-547'
+set firewall.allow_dhcp_{{ z }}.target='ACCEPT'
+
+set firewall.allow_dns_{{ z }}=rule
+set firewall.allow_dns_{{ z }}.name='Allow-DNS-{{ z }}'
+set firewall.allow_dns_{{ z }}.src='{{ z }}'
+set firewall.allow_dns_{{ z }}.proto='tcp udp'
+set firewall.allow_dns_{{ z }}.dest_port='53'
+set firewall.allow_dns_{{ z }}.target='ACCEPT'
+
+set firewall.allow_icmp_{{ z }}=rule
+set firewall.allow_icmp_{{ z }}.name='Allow-ICMP-{{ z }}'
+set firewall.allow_icmp_{{ z }}.src='{{ z }}'
+set firewall.allow_icmp_{{ z }}.proto='icmp'
+set firewall.allow_icmp_{{ z }}.target='ACCEPT'
+{% endfor %}
+
+# --- Standard WAN Input Rules ---
+set firewall.allow_wan_dhcp=rule
+set firewall.allow_wan_dhcp.name='Allow-DHCP-Renew'
+set firewall.allow_wan_dhcp.src='wan'
+set firewall.allow_wan_dhcp.proto='udp'
+set firewall.allow_wan_dhcp.dest_port='68'
+set firewall.allow_wan_dhcp.family='ipv4'
+set firewall.allow_wan_dhcp.target='ACCEPT'
+
+set firewall.allow_wan_dhcpv6=rule
+set firewall.allow_wan_dhcpv6.name='Allow-DHCPv6'
+set firewall.allow_wan_dhcpv6.src='wan'
+set firewall.allow_wan_dhcpv6.proto='udp'
+set firewall.allow_wan_dhcpv6.dest_port='546'
+set firewall.allow_wan_dhcpv6.family='ipv6'
+set firewall.allow_wan_dhcpv6.target='ACCEPT'
+
+set firewall.allow_wan_ping=rule
+set firewall.allow_wan_ping.name='Allow-Ping'
+set firewall.allow_wan_ping.src='wan'
+set firewall.allow_wan_ping.proto='icmp'
+set firewall.allow_wan_ping.target='ACCEPT'
+
+# Allow inbound connections from Internet to Lab VLAN (IPv6 / direct routing)
+set firewall.allow_wan_to_lab=forwarding
+set firewall.allow_wan_to_lab.src='wan'
+set firewall.allow_wan_to_lab.dest='lab'
+
+# --- Port Forwards (DNAT TCP 80/443 -> 192.168.20.10) ---
+{% for pf in port_forwards %}
+set firewall.pf_{{ pf.name }}=redirect
+set firewall.pf_{{ pf.name }}.name='{{ pf.name }}'
+set firewall.pf_{{ pf.name }}.target='DNAT'
+set firewall.pf_{{ pf.name }}.src='wan'
+set firewall.pf_{{ pf.name }}.dest='{{ pf.dest_zone }}'
+set firewall.pf_{{ pf.name }}.proto='{{ pf.proto }}'
+set firewall.pf_{{ pf.name }}.src_dport='{{ pf.src_dport }}'
+set firewall.pf_{{ pf.name }}.dest_ip='{{ pf.dest_ip }}'
+set firewall.pf_{{ pf.name }}.dest_port='{{ pf.dest_port }}'
+{% endfor %}

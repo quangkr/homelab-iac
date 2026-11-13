@@ -1,0 +1,41 @@
+---
+- name: Install WireGuard kernel module and tools
+  opkg:
+    name:
+      - kmod-wireguard
+      - wireguard-tools
+    state: present
+    update_cache: yes
+
+- name: Ensure local wireguard_clients directory exists on control node
+  delegate_to: localhost
+  file:
+    path: "{{ playbook_dir }}/wireguard_clients"
+    state: directory
+    mode: '0700'
+
+- name: Render client WireGuard .conf files on control node
+  delegate_to: localhost
+  template:
+    src: wg_client.conf.j2
+    dest: "{{ playbook_dir }}/wireguard_clients/{{ item.name }}.conf"
+    mode: '0600'
+  loop: "{{ wireguard_peers }}"
+  no_log: true
+
+- name: Deploy WireGuard UCI Script
+  template:
+    src: uci_wireguard.j2
+    dest: /etc/ansible_uci/06_wireguard.uci
+    mode: '0600'
+  register: uci_wg
+  no_log: true
+
+- name: Apply WireGuard UCI Script
+  raw: |
+    uci -q batch < /etc/ansible_uci/06_wireguard.uci
+    uci commit network
+    uci commit firewall
+    /etc/init.d/firewall reload
+    ifup wg0
+  when: uci_wg.changed

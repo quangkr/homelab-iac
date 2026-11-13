@@ -1,0 +1,23 @@
+---
+- name: Stop and disable router-only services on Dumb AP
+  raw: |
+    for svc in dnsmasq odhcpd firewall ddns smartdns; do
+      if [ -x "/etc/init.d/$svc" ]; then
+        /etc/init.d/$svc stop || true
+        /etc/init.d/$svc disable || true
+      fi
+    done
+  changed_when: false
+
+- name: Deploy Dumb AP UCI Script
+  template:
+    src: uci_dumb_ap.j2
+    dest: /etc/ansible_uci/02_role.uci
+    mode: '0600'
+  register: uci_dumb_ap
+
+- name: Apply Dumb AP UCI Script
+  raw: "uci -q batch < /etc/ansible_uci/02_role.uci && uci commit network && uci commit dhcp"
+  when: uci_dumb_ap.changed
+  notify:
+    - restart_network_safe

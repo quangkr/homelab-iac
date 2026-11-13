@@ -1,0 +1,26 @@
+---
+- name: Enable and start Core Router services
+  service:
+    name: "{{ item }}"
+    enabled: yes
+    state: started
+  loop:
+    - dnsmasq
+    - odhcpd
+    - firewall
+
+- name: Deploy Core Router Network, DHCP, and Firewall UCI Script
+  template:
+    src: uci_core.j2
+    dest: /etc/ansible_uci/02_role.uci
+    mode: '0600'
+  register: uci_core
+  no_log: true
+
+- name: Apply Core Router UCI Script
+  raw: "uci -q batch < /etc/ansible_uci/02_role.uci && uci commit network && uci commit dhcp && uci commit firewall"
+  when: uci_core.changed
+  notify:
+    - restart_network_safe
+    - restart_dnsmasq
+    - restart_odhcpd

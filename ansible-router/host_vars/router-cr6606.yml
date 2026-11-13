@@ -1,0 +1,25 @@
+---
+ansible_host: 192.168.10.3
+hardware_model: "Xiaomi CR6606"
+ap_ip_suffix: 3
+wireless_enabled: true
+
+wan_port: "eth0"
+wan_vlan_tag: none
+lan_ports:
+  - "eth1"
+  - "eth2"
+all_ports:
+  - "eth0"
+  - "eth1"
+  - "eth2"
+
+radios:
+  radio0:
+    band: "2g"
+    channel: "6"
+    htmode: "HE40"
+  radio1:
+    band: "5g"
+    channel: "149"
+    htmode: "HE80"

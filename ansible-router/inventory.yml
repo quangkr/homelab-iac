@@ -1,0 +1,10 @@
+---
+all:
+  children:
+    core_routers:
+      hosts:
+        router-nr3053:
+    dumb_aps:
+      hosts:
+        router-32x6v1:
+        router-cr6606:

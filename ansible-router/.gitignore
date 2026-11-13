@@ -1,0 +1,4 @@
+wireguard_clients/
+.vault_pass
+*.retry
+*.swp

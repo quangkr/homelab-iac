@@ -1,0 +1,35 @@
+# ==========================================
+# WireGuard Interface, Peers & Firewall
+# ==========================================
+delete network.wg0
+while uci -q delete network.@wireguard_wg0[0]; do :; done
+
+set network.wg0=interface
+set network.wg0.proto='wireguard'
+set network.wg0.private_key='{{ vault_wg_server_privkey }}'
+set network.wg0.listen_port='{{ wireguard_port }}'
+add_list network.wg0.addresses='{{ wireguard_gw_ip }}/24'
+add_list network.wg0.addresses='{{ wireguard_gw_ip6 }}'
+
+{% for peer in wireguard_peers %}
+set network.wg_peer_{{ peer.name | replace('-', '_') }}=wireguard_wg0
+set network.wg_peer_{{ peer.name | replace('-', '_') }}.description='{{ peer.name }}'
+set network.wg_peer_{{ peer.name | replace('-', '_') }}.public_key='{{ peer.pubkey }}'
+set network.wg_peer_{{ peer.name | replace('-', '_') }}.preshared_key='{{ peer.psk }}'
+set network.wg_peer_{{ peer.name | replace('-', '_') }}.route_allowed_ips='1'
+set network.wg_peer_{{ peer.name | replace('-', '_') }}.persistent_keepalive='25'
+add_list network.wg_peer_{{ peer.name | replace('-', '_') }}.allowed_ips='{{ peer.ip }}'
+add_list network.wg_peer_{{ peer.name | replace('-', '_') }}.allowed_ips='{{ peer.ip6 }}'
+{% endfor %}
+
+# Attach wg0 to the trusted LAN zone and allow UDP port on WAN
+del_list firewall.zone_lan.network='wg0'
+add_list firewall.zone_lan.network='wg0'
+
+delete firewall.allow_wan_wireguard
+set firewall.allow_wan_wireguard=rule
+set firewall.allow_wan_wireguard.name='Allow-WireGuard'
+set firewall.allow_wan_wireguard.src='wan'
+set firewall.allow_wan_wireguard.proto='udp'
+set firewall.allow_wan_wireguard.dest_port='{{ wireguard_port }}'
+set firewall.allow_wan_wireguard.target='ACCEPT'

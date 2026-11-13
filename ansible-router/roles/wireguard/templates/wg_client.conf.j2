@@ -1,0 +1,11 @@
+[Interface]
+PrivateKey = {{ item.privkey }}
+Address = {{ item.ip }}, {{ item.ip6 }}
+DNS = {{ wireguard_gw_ip }}
+
+[Peer]
+PublicKey = {{ wireguard_server_pubkey }}
+PresharedKey = {{ item.psk }}
+Endpoint = {{ wireguard_endpoint }}:{{ wireguard_port }}
+AllowedIPs = {{ item.allowed_ips }}
+PersistentKeepalive = 25

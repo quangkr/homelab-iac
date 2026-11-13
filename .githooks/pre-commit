@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# Check all staged Added, Copied, or Modified files ending in vault.yml
+# (skips deleted files and vault.yml.example)
+git diff --cached --name-only --diff-filter=ACM | while IFS= read -r file; do
+  case "$(basename "$file")" in
+    vault.yml|*.vault.yml)
+      if ! git show :"$file" | head -n 1 | grep -q '^\$ANSIBLE_VAULT;'; then
+        echo "ERROR: '$file' is staged without Ansible Vault encryption!"
+        echo "Run: ansible-vault encrypt \"$file\""
+        exit 1
+      fi
+      ;;
+  esac
+done

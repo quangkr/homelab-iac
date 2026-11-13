@@ -1,0 +1,26 @@
+---
+ansible_host: 192.168.10.2
+hardware_model: "Viettel VAP 32x6v1"
+ap_ip_suffix: 2
+wireless_enabled: true
+
+# Defined in case ap1 is ever promoted to core_routers
+wan_port: "eth0"
+wan_vlan_tag: none
+lan_ports:
+  - "eth1"
+  - "eth2"
+all_ports:
+  - "eth0"
+  - "eth1"
+  - "eth2"
+
+radios:
+  radio0:
+    band: "2g"
+    channel: "1"
+    htmode: "HE40"
+  radio1:
+    band: "5g"
+    channel: "36"
+    htmode: "HE80"

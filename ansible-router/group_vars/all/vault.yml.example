@@ -1,0 +1,134 @@
+# vim: ft=yaml :
+---
+# PPPoE WAN Credentials
+vault_pppoe_user: "PPPOE_USER"
+vault_pppoe_pass: "PPPOE_PASS"
+
+# Wireless SSIDs & Passphrases
+ssids:
+  - id: "main"
+    band_ssids:
+      2g: "MainWifi"
+      5g: "MainWifi"
+    network: "lan"
+    encryption: "sae-mixed"
+    ieee80211r: true
+    mobility_domain: "4f57"
+    hidden: true
+    key: "CHANGE_ME_MAIN_PASS"
+
+  - id: "lab"
+    band_ssids:
+      2g: "LabWifi-2G"
+      5g: "LabWifi-5G"
+    network: "lab"
+    encryption: "sae-mixed"
+    ieee80211r: true
+    mobility_domain: "4f58"
+    hidden: true
+    key: "CHANGE_ME_LAB_PASS"
+
+  - id: "guest"
+    band_ssids:
+      2g: "HomeWifi"
+      5g: "HomeWifi"
+    network: "guest"
+    encryption: "sae-mixed"
+    ieee80211r: true
+    mobility_domain: "4f59"
+    hidden: false
+    key: "CHANGE_ME_GUEST_PASS"
+
+  - id: "iot"
+    band_ssids:
+      2g: "IotWifi"
+    network: "iot"
+    encryption: "psk2+ccmp"
+    ieee80211r: false
+    hidden: true
+    key: "CHANGE_ME_IOT_PASS"
+
+  - id: "iot_pub"
+    band_ssids:
+      2g: "IotPubWifi"
+    network: "iot_pub"
+    encryption: "psk2+ccmp"
+    ieee80211r: false
+    hidden: true
+    key: "CHANGE_ME_IOT_PUB_PASS"
+
+# Port Forwards
+port_forwards: 
+  - name: "Lab_HTTP"
+    proto: "tcp"
+    src_dport: 80
+    dest_zone: "lab"
+    dest_ip: "192.168.20.2"
+    dest_port: 80
+  - name: "Lab_HTTPS"
+    proto: "tcp"
+    src_dport: 443
+    dest_zone: "lab"
+    dest_ip: "192.168.20.2"
+    dest_port: 443
+
+# Cloudflare DDNS Domains & API Tokens
+ddns_domains:
+  - zone: "example.com"
+    api_token: "CLOUDFLARE_API_TOKEN_1"
+    ipv4: true
+    ipv6: true
+    subdomains:
+      - name: "@"
+      - name: "lab"
+        ipv4: true
+        ipv6: false
+      - name: "vpn"
+        ipv4: true
+        ipv6: true
+
+  - zone: "example.net"
+    api_token: "CLOUDFLARE_API_TOKEN_2"
+    ipv4: true
+    ipv6: false
+    subdomains:
+      - name: "@"
+      - name: "*.home"
+        ipv4: true
+        ipv6: true
+
+# Private IPv6 ULA Prefix
+ula_prefix: "fd00:1234:5678::/48"
+
+# WireGuard Server & Peer Keys
+wireguard_endpoint: "vpn.example.com"
+wireguard_port: 56789
+wireguard_gw_ip6: "fd00:1234:5678:9::1/64"
+
+wireguard_server_pubkey: "SERVER_PUBLIC_KEY_BASE64="
+vault_wg_server_privkey: "SERVER_PRIVATE_KEY_BASE64="
+
+wireguard_peers:
+  - name: "laptop"
+    pubkey: "LAPTOP_PUBLIC_KEY_BASE64="
+    privkey: "LAPTOP_PRIVATE_KEY_BASE64="
+    psk: "LAPTOP_PRESHARED_KEY_BASE64="
+    ip: "192.168.9.2/32"
+    ip6: "fd00:1234:5678:9::2/128"
+    allowed_ips: "0.0.0.0/0, ::/0"
+
+  - name: "phone"
+    pubkey: "PHONE_PUBLIC_KEY_BASE64="
+    privkey: "PHONE_PRIVATE_KEY_BASE64="
+    psk: "PHONE_PRESHARED_KEY_BASE64="
+    ip: "192.168.9.3/32"
+    ip6: "fd00:1234:5678:9::3/128"
+    allowed_ips: "0.0.0.0/0, ::/0"
+
+  - name: "admin-split"
+    pubkey: "ADMIN_SPLIT_PUBLIC_KEY_BASE64="
+    privkey: "ADMIN_SPLIT_PRIVATE_KEY_BASE64="
+    psk: "ADMIN_SPLIT_PRESHARED_KEY_BASE64="
+    ip: "192.168.9.4/32"
+    ip6: "fd00:1234:5678:9::4/128"
+    allowed_ips: "192.168.9.0/24, 192.168.10.0/24, 192.168.20.0/24, 192.168.30.0/24, 192.168.40.0/24, 192.168.41.0/24, fd00:1234:5678::/48"

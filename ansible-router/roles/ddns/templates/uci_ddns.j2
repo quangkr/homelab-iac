@@ -1,0 +1,51 @@
+# Wipe existing DDNS service sections to prevent stale domains/subdomains
+while uci -q delete ddns.@service[0]; do :; done
+
+{% for dom in ddns_domains %}
+{% set safe_zone = dom.zone | replace('.', '_') %}
+{% for sub in dom.subdomains %}
+{% set sub_name = sub.name %}
+{% set enable_v4 = sub.ipv4 if sub.ipv4 is defined else (dom.ipv4 | default(true)) %}
+{% set enable_v6 = sub.ipv6 if sub.ipv6 is defined else (dom.ipv6 | default(false)) %}
+{% set safe_sub = sub_name | replace('@', 'root') | replace('*', 'wildcard') | replace('.', '_') %}
+{% set cf_domain = '@' ~ dom.zone if sub_name == '@' else sub_name ~ '@' ~ dom.zone %}
+{% set lookup_fqdn = dom.zone if sub_name == '@' else (sub_name | replace('*.', '')) ~ '.' ~ dom.zone %}
+
+{% if enable_v4 %}
+# --- IPv4 (A Record): {{ lookup_fqdn }} ---
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}=service
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.enabled='1'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.lookup_host='{{ lookup_fqdn }}'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.use_ipv6='0'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.service_name='cloudflare.com-v4'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.domain='{{ cf_domain }}'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.username='Bearer'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.password='{{ dom.api_token }}'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.ip_source='network'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.ip_network='{{ ddns_ipv4_interface }}'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.interface='{{ ddns_ipv4_interface }}'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.use_syslog='2'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.check_interval='10'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.check_unit='minutes'
+{% endif %}
+
+{% if enable_v6 %}
+# --- IPv6 (AAAA Record): {{ lookup_fqdn }} ---
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}=service
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.enabled='1'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.lookup_host='{{ lookup_fqdn }}'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.use_ipv6='1'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.service_name='cloudflare.com-v4'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.domain='{{ cf_domain }}'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.username='Bearer'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.password='{{ dom.api_token }}'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.ip_source='network'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.ip_network='{{ ddns_ipv6_interface }}'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.interface='{{ ddns_ipv6_interface }}'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.use_syslog='2'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.check_interval='10'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.check_unit='minutes'
+{% endif %}
+
+{% endfor %}
+{% endfor %}

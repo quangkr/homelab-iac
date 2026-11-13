@@ -1,0 +1,33 @@
+# Remove any residual Core Router WAN / WG interfaces and peers
+delete network.wan
+delete network.wan6
+delete network.wg0
+while uci -q delete network.@wireguard_wg0[0]; do :; done
+
+# Configure VLAN 10 with Static Management IP (192.168.10.[2-9])
+delete network.lan
+set network.lan=interface
+set network.lan.device='br-lan.10'
+set network.lan.proto='static'
+set network.lan.ipaddr='192.168.10.{{ ap_ip_suffix }}'
+set network.lan.netmask='255.255.255.0'
+set network.lan.gateway='192.168.10.1'
+add_list network.lan.dns='192.168.10.1'
+set network.lan.ip6assign='64'
+set network.lan.ip6hint='a'
+
+# Configure VLANs 20, 30, 40, 41 as Unmanaged Layer-2 Bridges for Wi-Fi SSIDs
+{% for vlan in vlans if vlan.id != 10 %}
+delete network.{{ vlan.name }}
+set network.{{ vlan.name }}=interface
+set network.{{ vlan.name }}.device='br-lan.{{ vlan.id }}'
+set network.{{ vlan.name }}.proto='none'
+{% endfor %}
+
+# Ignore DHCP on all interfaces in case dnsmasq is ever manually started
+{% for vlan in vlans %}
+delete dhcp.{{ vlan.name }}
+set dhcp.{{ vlan.name }}=dhcp
+set dhcp.{{ vlan.name }}.interface='{{ vlan.name }}'
+set dhcp.{{ vlan.name }}.ignore='1'
+{% endfor %}

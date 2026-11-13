@@ -1,0 +1,56 @@
+---
+ansible_user: root
+country_code: "VN"
+
+wireguard_gw: "192.168.9.1/24"
+default_pvid_vlan: 10
+vlans:
+  - id: 10
+    name: "lan"
+    desc: "Management / Main LAN"
+    subnet_prefix: "192.168.10"
+    netmask: "255.255.255.0"
+    ip6assign: 64
+    ip6hint: 10
+    dhcp: true
+  - id: 20
+    name: "lab"
+    desc: "Lab VLAN"
+    subnet_prefix: "192.168.20"
+    netmask: "255.255.255.0"
+    ip6assign: 64
+    ip6hint: 20
+    dhcp: true
+  - id: 30
+    name: "guest"
+    desc: "Family / Guest VLAN"
+    subnet_prefix: "192.168.30"
+    netmask: "255.255.255.0"
+    ip6assign: 64
+    ip6hint: 30
+    dhcp: true
+  - id: 40
+    name: "iot"
+    desc: "IoT VLAN (No Internet)"
+    subnet_prefix: "192.168.40"
+    netmask: "255.255.255.0"
+    ip6assign: 64
+    ip6hint: 40
+    dhcp: true
+  - id: 41
+    name: "iot_pub"
+    desc: "IoT Internet VLAN"
+    subnet_prefix: "192.168.41"
+    netmask: "255.255.255.0"
+    ip6assign: 64
+    ip6hint: 41
+    dhcp: true
+
+ddns_ipv4_interface: "wan"
+ddns_ipv6_interface: "wan6"
+
+smartdns_blocklists:
+  - name: "oisd_small"
+    url: "https://small.oisd.nl/domainswild2"
+  - name: "hagezi_pro_mini"
+    url: "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/domains/pro.mini.txt"

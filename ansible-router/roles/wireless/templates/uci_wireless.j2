@@ -1,0 +1,44 @@
+# Wipe all existing wifi-iface sections to prevent stale SSIDs on role switch
+while uci -q delete wireless.@wifi-iface[0]; do :; done
+
+{% for radio_name, radio_cfg in radios.items() %}
+set wireless.{{ radio_name }}.country='{{ country_code }}'
+set wireless.{{ radio_name }}.channel='{{ radio_cfg.channel }}'
+set wireless.{{ radio_name }}.htmode='{{ radio_cfg.htmode }}'
+set wireless.{{ radio_name }}.cell_density='0'
+{% if wireless_enabled | default(true) %}
+set wireless.{{ radio_name }}.disabled='0'
+{% else %}
+set wireless.{{ radio_name }}.disabled='1'
+{% endif %}
+{% endfor %}
+
+{% if wireless_enabled | default(true) %}
+{% for ssid_cfg in ssids %}
+{% for radio_name, radio_cfg in radios.items() %}
+{% if radio_cfg.band in ssid_cfg.band_ssids %}
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}=wifi-iface
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}.device='{{ radio_name }}'
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}.mode='ap'
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}.ssid='{{ ssid_cfg.band_ssids[radio_cfg.band] }}'
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}.network='{{ ssid_cfg.network }}'
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}.encryption='{{ ssid_cfg.encryption }}'
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}.key='{{ ssid_cfg.key }}'
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}.hidden='{{ 1 if ssid_cfg.hidden else 0 }}'
+{% if ssid_cfg.encryption == 'sae-mixed' %}
+# Required for WPA2/WPA3 mixed mode: 1 = optional (allows both WPA2 and WPA3 clients)
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}.ieee80211w='1'
+{% elif ssid_cfg.encryption == 'sae' %}
+# Required for pure WPA3: 2 = mandatory
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}.ieee80211w='2'
+{% endif %}
+{% if ssid_cfg.ieee80211r | default(false) %}
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}.ieee80211r='1'
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}.mobility_domain='{{ ssid_cfg.mobility_domain }}'
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}.ft_over_ds='0'
+set wireless.wifinet_{{ ssid_cfg.id }}_{{ radio_name }}.ft_psk_generate_local='1'
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endfor %}
+{% endif %}

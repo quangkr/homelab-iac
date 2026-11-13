@@ -1,0 +1,13 @@
+---
+- name: Deploy Wireless UCI Script
+  template:
+    src: uci_wireless.j2
+    dest: /etc/ansible_uci/03_wireless.uci
+    mode: '0600'
+  register: uci_wireless
+
+- name: Apply Wireless UCI Script
+  raw: "uci -q batch < /etc/ansible_uci/03_wireless.uci && uci commit wireless"
+  when: uci_wireless.changed
+  notify:
+    - reload_wifi
