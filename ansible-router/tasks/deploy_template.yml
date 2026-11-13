@@ -1,0 +1,29 @@
+---
+- name: "Upload {{ dest_path }} in Dropbear-safe chunks"
+  raw: |
+    printf -- '%s' {{ item | quote }} {{ '>' if chunk_idx == 0 else '>>' }} {{ dest_path }}.tmp
+  loop: "{{ lookup('template', template_src) | batch(500) | map('join') | list }}"
+  loop_control:
+    index_var: chunk_idx
+    label: "chunk {{ chunk_idx + 1 }}"
+  changed_when: false
+  no_log: "{{ hide_log | default(false) }}"
+
+- name: "Verify and apply {{ dest_path }}"
+  raw: |
+    set -e
+    if [ ! -s {{ dest_path }}.tmp ]; then
+      echo "ERROR: Rendered file {{ dest_path }}.tmp is empty" >&2
+      rm -f {{ dest_path }}.tmp
+      exit 1
+    fi
+    chmod {{ file_mode | default('0600') }} {{ dest_path }}.tmp
+    if [ ! -f {{ dest_path }} ] || ! cmp -s {{ dest_path }}.tmp {{ dest_path }}; then
+      mv {{ dest_path }}.tmp {{ dest_path }}
+      echo "CHANGED"
+    else
+      rm -f {{ dest_path }}.tmp
+    fi
+  register: _deploy_result
+  changed_when: "'CHANGED' in _deploy_result.stdout"
+  no_log: "{{ hide_log | default(false) }}"

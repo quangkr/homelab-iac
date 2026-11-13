@@ -1,20 +1,43 @@
 ---
-- name: Install Cloudflare DDNS packages
-  opkg:
-    name:
-      - ddns-scripts
-      - ddns-scripts-cloudflare
-      - curl
-      - ca-bundle
-    state: present
-    update_cache: yes
+- name: Install Cloudflare DDNS packages (apk / opkg)
+  raw: |
+    PKGS="ddns-scripts ddns-scripts-cloudflare curl ca-bundle"
+    MISSING=""
+    if command -v apk >/dev/null 2>&1; then
+      for pkg in $PKGS; do
+        apk info -e "$pkg" >/dev/null 2>&1 || MISSING="$MISSING $pkg"
+      done
+      if [ -n "$MISSING" ]; then
+        apk update && apk add $MISSING
+        echo "INSTALLED"
+      fi
+    else
+      for pkg in $PKGS; do
+        opkg status "$pkg" | grep -q "Status: install" || MISSING="$MISSING $pkg"
+      done
+      if [ -n "$MISSING" ]; then
+        opkg update && opkg install $MISSING
+        echo "INSTALLED"
+      fi
+    fi
+  register: ddns_pkg
+  changed_when: "'INSTALLED' in ddns_pkg.stdout"
 
 - name: Deploy DDNS UCI Script
-  template:
-    src: uci_ddns.j2
-    dest: /etc/ansible_uci/04_ddns.uci
-    mode: '0600'
+  raw: |
+    cat << 'ANSIBLE_EOF' > /etc/ansible_uci/04_ddns.uci.tmp
+    {{ lookup('template', 'uci_ddns.j2') }}
+    ANSIBLE_EOF
+    chmod 600 /etc/ansible_uci/04_ddns.uci.tmp
+    if [ ! -f /etc/ansible_uci/04_ddns.uci ] || ! cmp -s /etc/ansible_uci/04_ddns.uci.tmp /etc/ansible_uci/04_ddns.uci; then
+      mv /etc/ansible_uci/04_ddns.uci.tmp /etc/ansible_uci/04_ddns.uci
+      echo "CHANGED"
+    else
+      rm -f /etc/ansible_uci/04_ddns.uci.tmp
+    fi
   register: uci_ddns
+  changed_when: "'CHANGED' in uci_ddns.stdout"
+  no_log: true
 
 - name: Apply DDNS UCI Script
   raw: "uci -q batch < /etc/ansible_uci/04_ddns.uci && uci commit ddns"
@@ -23,7 +46,7 @@
     - restart_ddns
 
 - name: Enable and start DDNS service
-  service:
-    name: ddns
-    enabled: yes
-    state: started
+  raw: |
+    /etc/init.d/ddns enabled || /etc/init.d/ddns enable
+    /etc/init.d/ddns running || /etc/init.d/ddns start
+  changed_when: false

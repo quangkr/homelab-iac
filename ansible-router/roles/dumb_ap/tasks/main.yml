@@ -10,11 +10,19 @@
   changed_when: false
 
 - name: Deploy Dumb AP UCI Script
-  template:
-    src: uci_dumb_ap.j2
-    dest: /etc/ansible_uci/02_role.uci
-    mode: '0600'
+  raw: |
+    cat << 'ANSIBLE_EOF' > /etc/ansible_uci/02_role.uci.tmp
+    {{ lookup('template', 'uci_dumb_ap.j2') }}
+    ANSIBLE_EOF
+    chmod 600 /etc/ansible_uci/02_role.uci.tmp
+    if [ ! -f /etc/ansible_uci/02_role.uci ] || ! cmp -s /etc/ansible_uci/02_role.uci.tmp /etc/ansible_uci/02_role.uci; then
+      mv /etc/ansible_uci/02_role.uci.tmp /etc/ansible_uci/02_role.uci
+      echo "CHANGED"
+    else
+      rm -f /etc/ansible_uci/02_role.uci.tmp
+    fi
   register: uci_dumb_ap
+  changed_when: "'CHANGED' in uci_dumb_ap.stdout"
 
 - name: Apply Dumb AP UCI Script
   raw: "uci -q batch < /etc/ansible_uci/02_role.uci && uci commit network && uci commit dhcp"

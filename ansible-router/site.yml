@@ -6,7 +6,6 @@
   hosts: all
   gather_facts: false
   roles:
-    - role: gekmihesg.openwrt
     - role: common
     - role: core_router
       when: "'core_routers' in group_names"
@@ -49,7 +48,6 @@
         exit 1
       changed_when: false
   roles:
-    - role: gekmihesg.openwrt
     - role: wireguard
     - role: ddns
     - role: smartdns

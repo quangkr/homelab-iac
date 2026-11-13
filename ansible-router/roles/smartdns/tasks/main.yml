@@ -1,46 +1,98 @@
 ---
-- name: Install SmartDNS and HTTPS support packages
-  opkg:
-    name:
-      - smartdns
-      - wget-ssl
-      - ca-bundle
-    state: present
-    update_cache: yes
+- name: Install SmartDNS and HTTPS support packages (apk / opkg)
+  raw: |
+    PKGS="smartdns wget-ssl ca-bundle"
+    MISSING=""
+    if command -v apk >/dev/null 2>&1; then
+      for pkg in $PKGS; do
+        apk info -e "$pkg" >/dev/null 2>&1 || MISSING="$MISSING $pkg"
+      done
+      if [ -n "$MISSING" ]; then
+        apk update && apk add $MISSING
+        echo "INSTALLED"
+      fi
+    else
+      for pkg in $PKGS; do
+        opkg status "$pkg" | grep -q "Status: install" || MISSING="$MISSING $pkg"
+      done
+      if [ -n "$MISSING" ]; then
+        opkg update && opkg install $MISSING
+        echo "INSTALLED"
+      fi
+    fi
+  register: smartdns_pkg
+  changed_when: "'INSTALLED' in smartdns_pkg.stdout"
 
 - name: Ensure SmartDNS blocklist directory exists
-  file:
-    path: /etc/smartdns/blocklists
-    state: directory
-    mode: '0755'
+  raw: "mkdir -p /etc/smartdns/blocklists && chmod 755 /etc/smartdns/blocklists"
+  changed_when: false
 
-- name: Download OISD Small and HaGeZi Pro Mini blocklists
+- name: Download missing SmartDNS blocklists
   raw: |
     {% for bl in smartdns_blocklists %}
-    wget -qO /etc/smartdns/blocklists/{{ bl.name }}.conf "{{ bl.url }}"
+    if [ ! -s /etc/smartdns/blocklists/{{ bl.name }}.conf ]; then
+      wget -qO /etc/smartdns/blocklists/{{ bl.name }}.conf "{{ bl.url }}"
+      echo "DOWNLOADED"
+    fi
     {% endfor %}
-  args:
-    creates: "/etc/smartdns/blocklists/oisd_small.conf"
+  register: bl_dl
+  changed_when: "'DOWNLOADED' in bl_dl.stdout"
+  notify:
+    - restart_smartdns
+
+- name: Deploy SmartDNS custom rules (.lan forwarding & domain-sets)
+  raw: |
+    cat << 'ANSIBLE_EOF' > /etc/smartdns/custom.conf.tmp
+    {{ lookup('template', 'custom.conf.j2') }}
+    ANSIBLE_EOF
+    chmod 644 /etc/smartdns/custom.conf.tmp
+    if [ ! -f /etc/smartdns/custom.conf ] || ! cmp -s /etc/smartdns/custom.conf.tmp /etc/smartdns/custom.conf; then
+      mv /etc/smartdns/custom.conf.tmp /etc/smartdns/custom.conf
+      echo "CHANGED"
+    else
+      rm -f /etc/smartdns/custom.conf.tmp
+    fi
+  register: smartdns_custom
+  changed_when: "'CHANGED' in smartdns_custom.stdout"
   notify:
     - restart_smartdns
 
 - name: Create weekly cronjob to update SmartDNS blocklists
-  copy:
-    dest: /etc/cron.weekly/update_smartdns_blocklists.sh
-    mode: '0755'
-    content: |
-      #!/bin/sh
-      {% for bl in smartdns_blocklists %}
-      wget -qO /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp "{{ bl.url }}" && mv /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp /etc/smartdns/blocklists/{{ bl.name }}.conf
-      {% endfor %}
-      /etc/init.d/smartdns restart
+  raw: |
+    cat << 'ANSIBLE_EOF' > /etc/cron.weekly/update_smartdns_blocklists.sh.tmp
+    #!/bin/sh
+    {% for bl in smartdns_blocklists %}
+    wget -qO /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp "{{ bl.url }}" && mv /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp /etc/smartdns/blocklists/{{ bl.name }}.conf
+    {% endfor %}
+    /etc/init.d/smartdns restart
+    ANSIBLE_EOF
+    chmod 755 /etc/cron.weekly/update_smartdns_blocklists.sh.tmp
+    if [ ! -f /etc/cron.weekly/update_smartdns_blocklists.sh ] || ! cmp -s /etc/cron.weekly/update_smartdns_blocklists.sh.tmp /etc/cron.weekly/update_smartdns_blocklists.sh; then
+      mv /etc/cron.weekly/update_smartdns_blocklists.sh.tmp /etc/cron.weekly/update_smartdns_blocklists.sh
+      echo "CHANGED"
+    else
+      rm -f /etc/cron.weekly/update_smartdns_blocklists.sh.tmp
+    fi
+  register: smartdns_cron
+  changed_when: "'CHANGED' in smartdns_cron.stdout"
 
 - name: Deploy SmartDNS UCI Script
-  template:
-    src: uci_smartdns.j2
-    dest: /etc/ansible_uci/05_smartdns.uci
-    mode: '0600'
+  raw: |
+    cat << 'ANSIBLE_EOF' > /etc/ansible_uci/05_smartdns.uci.tmp
+    {{ lookup('template', 'uci_smartdns.j2') }}
+    ANSIBLE_EOF
+    chmod 600 /etc/ansible_uci/05_smartdns.uci.tmp
+    if [ ! -f /etc/ansible_uci/05_smartdns.uci ] || ! cmp -s /etc/ansible_uci/05_smartdns.uci.tmp /etc/ansible_uci/05_smartdns.uci; then
+      mv /etc/ansible_uci/05_smartdns.uci.tmp /etc/ansible_uci/05_smartdns.uci
+      echo "CHANGED"
+    else
+      rm -f /etc/ansible_uci/05_smartdns.uci.tmp
+    fi
   register: uci_smartdns
+  changed_when: "'CHANGED' in uci_smartdns.stdout"
+  notify:
+    - restart_dnsmasq
+    - restart_smartdns
 
 - name: Apply SmartDNS UCI Script
   raw: "uci -q batch < /etc/ansible_uci/05_smartdns.uci && uci commit smartdns && uci commit dhcp"
@@ -50,7 +102,7 @@
     - restart_smartdns
 
 - name: Enable and start SmartDNS service
-  service:
-    name: smartdns
-    enabled: yes
-    state: started
+  raw: |
+    /etc/init.d/smartdns enabled || /etc/init.d/smartdns enable
+    /etc/init.d/smartdns running || /etc/init.d/smartdns start
+  changed_when: false

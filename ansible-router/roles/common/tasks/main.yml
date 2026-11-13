@@ -1,9 +1,7 @@
 ---
 - name: Ensure UCI staging directory exists
-  file:
-    path: /etc/ansible_uci
-    state: directory
-    mode: '0700'
+  raw: "mkdir -p /etc/ansible_uci && chmod 700 /etc/ansible_uci"
+  changed_when: false
 
 - name: Disable conflicting pre-installed adblock services
   raw: |
@@ -16,15 +14,16 @@
   changed_when: false
 
 - name: Deploy Common System & Bridge-VLAN UCI Script
-  template:
-    src: uci_common.j2
-    dest: /etc/ansible_uci/01_common.uci
-    mode: '0600'
-  register: uci_common
+  include_tasks: "{{ playbook_dir }}/tasks/deploy_template.yml"
+  vars:
+    template_src: "uci_common.j2"
+    dest_path: "/etc/ansible_uci/01_common.uci"
+    file_mode: "0600"
+    hide_log: true
 
 - name: Apply Common System & Bridge-VLAN UCI Script
   raw: "uci -q batch < /etc/ansible_uci/01_common.uci && uci commit system && uci commit network"
-  when: uci_common.changed
+  when: _deploy_result.changed
   notify:
     - reload_system
     - restart_network_safe

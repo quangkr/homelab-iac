@@ -1,11 +1,27 @@
 ---
-- name: Install WireGuard kernel module and tools
-  opkg:
-    name:
-      - kmod-wireguard
-      - wireguard-tools
-    state: present
-    update_cache: yes
+- name: Install WireGuard kernel module and tools (apk / opkg)
+  raw: |
+    PKGS="kmod-wireguard wireguard-tools"
+    MISSING=""
+    if command -v apk >/dev/null 2>&1; then
+      for pkg in $PKGS; do
+        apk info -e "$pkg" >/dev/null 2>&1 || MISSING="$MISSING $pkg"
+      done
+      if [ -n "$MISSING" ]; then
+        apk update && apk add $MISSING
+        echo "INSTALLED"
+      fi
+    else
+      for pkg in $PKGS; do
+        opkg status "$pkg" | grep -q "Status: install" || MISSING="$MISSING $pkg"
+      done
+      if [ -n "$MISSING" ]; then
+        opkg update && opkg install $MISSING
+        echo "INSTALLED"
+      fi
+    fi
+  register: wg_pkg
+  changed_when: "'INSTALLED' in wg_pkg.stdout"
 
 - name: Ensure local wireguard_clients directory exists on control node
   delegate_to: localhost
@@ -24,11 +40,19 @@
   no_log: true
 
 - name: Deploy WireGuard UCI Script
-  template:
-    src: uci_wireguard.j2
-    dest: /etc/ansible_uci/06_wireguard.uci
-    mode: '0600'
+  raw: |
+    cat << 'ANSIBLE_EOF' > /etc/ansible_uci/06_wireguard.uci.tmp
+    {{ lookup('template', 'uci_wireguard.j2') }}
+    ANSIBLE_EOF
+    chmod 600 /etc/ansible_uci/06_wireguard.uci.tmp
+    if [ ! -f /etc/ansible_uci/06_wireguard.uci ] || ! cmp -s /etc/ansible_uci/06_wireguard.uci.tmp /etc/ansible_uci/06_wireguard.uci; then
+      mv /etc/ansible_uci/06_wireguard.uci.tmp /etc/ansible_uci/06_wireguard.uci
+      echo "CHANGED"
+    else
+      rm -f /etc/ansible_uci/06_wireguard.uci.tmp
+    fi
   register: uci_wg
+  changed_when: "'CHANGED' in uci_wg.stdout"
   no_log: true
 
 - name: Apply WireGuard UCI Script
