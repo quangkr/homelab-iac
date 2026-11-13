@@ -8,7 +8,12 @@
     hide_log: true
 
 - name: Apply Wireless UCI Script
-  raw: "uci -q batch < /etc/ansible_uci/03_wireless.uci && uci commit wireless"
+  raw: |
+    set -e
+    [ -s /etc/config/wireless ] || wifi config
+    while uci -q delete wireless.@wifi-iface[0]; do :; done
+    uci batch < /etc/ansible_uci/03_wireless.uci
+    uci commit wireless
   when: _deploy_result.changed
   notify:
     - reload_wifi

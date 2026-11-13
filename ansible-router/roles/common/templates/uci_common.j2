@@ -13,10 +13,6 @@ set network.loopback.netmask='255.0.0.0'
 set network.globals=globals
 set network.globals.ula_prefix='{{ ula_prefix }}'
 
-# --- Clean Existing Bridge Devices & VLANs ---
-while uci -q delete network.@device[0]; do :; done
-while uci -q delete network.@bridge-vlan[0]; do :; done
-
 # --- Main DSA VLAN-Filtering Bridge (br-lan) ---
 set network.br_lan=device
 set network.br_lan.name='br-lan'

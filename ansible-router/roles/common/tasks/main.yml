@@ -22,7 +22,13 @@
     hide_log: true
 
 - name: Apply Common System & Bridge-VLAN UCI Script
-  raw: "uci -q batch < /etc/ansible_uci/01_common.uci && uci commit system && uci commit network"
+  raw: |
+    set -e
+    while uci -q delete network.@device[0]; do :; done
+    while uci -q delete network.@bridge-vlan[0]; do :; done
+    uci batch < /etc/ansible_uci/01_common.uci
+    uci commit system
+    uci commit network
   when: _deploy_result.changed
   notify:
     - reload_system

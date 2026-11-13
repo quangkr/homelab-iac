@@ -12,7 +12,9 @@ set network.wan.device='{{ wan_port }}'
 set network.wan.proto='pppoe'
 set network.wan.username='{{ vault_pppoe_user }}'
 set network.wan.password='{{ vault_pppoe_pass }}'
-set network.wan.ipv6='manual'
+# set network.wan.ipv6='manual'
+set network.wan.ipv6='1'
+set network.wan.multipath='off'
 set network.wan6=interface
 set network.wan6.device='@wan'
 set network.wan6.proto='dhcpv6'
@@ -61,11 +63,6 @@ add_list dhcp.{{ vlan.name }}.ra_flags='other-config'
 # ==========================================
 # 3. FIREWALL (Zones, Matrix & Port Forwards)
 # ==========================================
-# Wipe existing firewall rules cleanly before rebuilding
-{% for section in ['defaults', 'zone', 'forwarding', 'rule', 'redirect'] %}
-while uci -q delete firewall.@{{ section }}[0]; do :; done
-{% endfor %}
-
 set firewall.defaults=defaults
 set firewall.defaults.syn_flood='1'
 set firewall.defaults.input='REJECT'

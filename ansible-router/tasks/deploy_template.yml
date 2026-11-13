@@ -1,11 +1,21 @@
 ---
-- name: "Upload {{ dest_path }} in Dropbear-safe chunks"
-  raw: |
-    printf -- '%s' {{ item | quote }} {{ '>' if chunk_idx == 0 else '>>' }} {{ dest_path }}.tmp
-  loop: "{{ lookup('template', template_src) | batch(500) | map('join') | list }}"
-  loop_control:
-    index_var: chunk_idx
-    label: "chunk {{ chunk_idx + 1 }}"
+- name: "Stream {{ dest_path }} to router over SSH stdin"
+  delegate_to: localhost
+  command:
+    argv:
+      - ssh
+      - -o
+      - ControlMaster=no
+      - -o
+      - StrictHostKeyChecking=no
+      - -o
+      - UserKnownHostsFile=/dev/null
+      - -p
+      - "{{ ansible_port | default(22) }}"
+      - "{{ ansible_user }}@{{ ansible_host }}"
+      - "cat > {{ dest_path }}.tmp"
+    stdin: "{{ lookup('template', template_src) }}"
+    stdin_add_newline: false
   changed_when: false
   no_log: "{{ hide_log | default(false) }}"
 
@@ -13,7 +23,7 @@
   raw: |
     set -e
     if [ ! -s {{ dest_path }}.tmp ]; then
-      echo "ERROR: Rendered file {{ dest_path }}.tmp is empty" >&2
+      echo "ERROR: Streamed file {{ dest_path }}.tmp is empty" >&2
       rm -f {{ dest_path }}.tmp
       exit 1
     fi

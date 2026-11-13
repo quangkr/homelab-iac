@@ -48,11 +48,13 @@ port_vlans:
     tagged: "all"
 
 radios:
-  ra0:
+  MT7981_1_1:
     band: "2g"
+    phy: "ra0"
     channel: "auto"
     htmode: "HE40"
-  rax0:
+  MT7981_1_2:
     band: "5g"
+    phy: "rax0"
     channel: "auto"
     htmode: "HE160"
