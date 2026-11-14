@@ -41,65 +41,61 @@
     - restart_smartdns
 
 - name: Deploy SmartDNS custom rules (.lan forwarding & domain-sets)
-  raw: |
-    cat << 'ANSIBLE_EOF' > /etc/smartdns/custom.conf.tmp
-    {{ lookup('template', 'custom.conf.j2') }}
-    ANSIBLE_EOF
-    chmod 644 /etc/smartdns/custom.conf.tmp
-    if [ ! -f /etc/smartdns/custom.conf ] || ! cmp -s /etc/smartdns/custom.conf.tmp /etc/smartdns/custom.conf; then
-      mv /etc/smartdns/custom.conf.tmp /etc/smartdns/custom.conf
-      echo "CHANGED"
-    else
-      rm -f /etc/smartdns/custom.conf.tmp
-    fi
-  register: smartdns_custom
-  changed_when: "'CHANGED' in smartdns_custom.stdout"
-  notify:
-    - restart_smartdns
+  include_tasks: "{{ playbook_dir }}/tasks/deploy_template.yml"
+  vars:
+    template_src: "custom.conf.j2"
+    dest_path: "/etc/smartdns/custom.conf"
+    file_mode: "0644"
+    hide_log: true
 
-- name: Create weekly cronjob to update SmartDNS blocklists
+- name: Ensure weekly cron directory exists
+  raw: "mkdir -p /etc/cron.weekly"
+  changed_when: false
+
+- name: Deploy weekly SmartDNS blocklist update script
+  include_tasks: "{{ playbook_dir }}/tasks/deploy_template.yml"
+  vars:
+    template_src: "update_smartdns_blocklists.sh.j2"
+    dest_path: "/etc/cron.weekly/update_smartdns_blocklists.sh"
+    file_mode: "0755"
+    hide_log: false
+
+- name: Schedule weekly SmartDNS blocklist update in root crontab
   raw: |
-    cat << 'ANSIBLE_EOF' > /etc/cron.weekly/update_smartdns_blocklists.sh.tmp
-    #!/bin/sh
-    {% for bl in smartdns_blocklists %}
-    wget -qO /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp "{{ bl.url }}" && mv /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp /etc/smartdns/blocklists/{{ bl.name }}.conf
-    {% endfor %}
-    /etc/init.d/smartdns restart
-    ANSIBLE_EOF
-    chmod 755 /etc/cron.weekly/update_smartdns_blocklists.sh.tmp
-    if [ ! -f /etc/cron.weekly/update_smartdns_blocklists.sh ] || ! cmp -s /etc/cron.weekly/update_smartdns_blocklists.sh.tmp /etc/cron.weekly/update_smartdns_blocklists.sh; then
-      mv /etc/cron.weekly/update_smartdns_blocklists.sh.tmp /etc/cron.weekly/update_smartdns_blocklists.sh
-      echo "CHANGED"
-    else
-      rm -f /etc/cron.weekly/update_smartdns_blocklists.sh.tmp
+    set -e
+    mkdir -p /etc/crontabs
+    touch /etc/crontabs/root
+    if ! grep -q "update_smartdns_blocklists.sh" /etc/crontabs/root; then
+      echo "0 4 * * 0 /etc/cron.weekly/update_smartdns_blocklists.sh" >> /etc/crontabs/root
     fi
-  register: smartdns_cron
-  changed_when: "'CHANGED' in smartdns_cron.stdout"
+    /etc/init.d/cron enabled || /etc/init.d/cron enable
+    /etc/init.d/cron restart
+  register: _cron_result
+  changed_when: false
 
 - name: Deploy SmartDNS UCI Script
-  raw: |
-    cat << 'ANSIBLE_EOF' > /etc/ansible_uci/05_smartdns.uci.tmp
-    {{ lookup('template', 'uci_smartdns.j2') }}
-    ANSIBLE_EOF
-    chmod 600 /etc/ansible_uci/05_smartdns.uci.tmp
-    if [ ! -f /etc/ansible_uci/05_smartdns.uci ] || ! cmp -s /etc/ansible_uci/05_smartdns.uci.tmp /etc/ansible_uci/05_smartdns.uci; then
-      mv /etc/ansible_uci/05_smartdns.uci.tmp /etc/ansible_uci/05_smartdns.uci
-      echo "CHANGED"
-    else
-      rm -f /etc/ansible_uci/05_smartdns.uci.tmp
-    fi
-  register: uci_smartdns
-  changed_when: "'CHANGED' in uci_smartdns.stdout"
-  notify:
-    - restart_dnsmasq
-    - restart_smartdns
+  include_tasks: "{{ playbook_dir }}/tasks/deploy_template.yml"
+  vars:
+    template_src: "uci_smartdns.j2"
+    dest_path: "/etc/ansible_uci/05_smartdns.uci"
+    file_mode: "0600"
+    hide_log: true
 
 - name: Apply SmartDNS UCI Script
-  raw: "uci -q batch < /etc/ansible_uci/05_smartdns.uci && uci commit smartdns && uci commit dhcp"
-  when: uci_smartdns.changed
+  raw: |
+    set -e
+    while uci -q delete smartdns.@smartdns[0]; do :; done
+    while uci -q delete smartdns.@server[0]; do :; done
+    uci batch < /etc/ansible_uci/05_smartdns.uci
+    uci commit smartdns
+    uci commit dhcp
+    uci commit network
+  when: _deploy_result.changed
   notify:
     - restart_dnsmasq
+    - restart_odhcpd
     - restart_smartdns
+    - restart_network_safe
 
 - name: Enable and start SmartDNS service
   raw: |

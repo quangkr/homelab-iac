@@ -4,7 +4,17 @@
 vault_pppoe_user: "PPPOE_USER"
 vault_pppoe_pass: "PPPOE_PASS"
 
-# Wireless SSIDs & Passphrases
+dhcp_static_leases:
+  - name: "home-server"
+    mac: "aa:bb:cc:dd:ee:01"
+    ip: "192.168.10.10"
+  - name: "nas"
+    mac: "aa:bb:cc:dd:ee:02"
+    ip: "192.168.10.20"
+  - name: "smart-tv"
+    mac: "aa:bb:cc:dd:ee:03"
+    ip: "192.168.30.50"
+
 ssids:
   - id: "main"
     band_ssids:
@@ -57,7 +67,6 @@ ssids:
     hidden: true
     key: "CHANGE_ME_IOT_PUB_PASS"
 
-# Port Forwards
 port_forwards: 
   - name: "Lab_HTTP"
     proto: "tcp"
@@ -72,7 +81,6 @@ port_forwards:
     dest_ip: "192.168.20.2"
     dest_port: 443
 
-# Cloudflare DDNS Domains & API Tokens
 ddns_domains:
   - zone: "example.com"
     api_token: "CLOUDFLARE_API_TOKEN_1"
@@ -97,38 +105,5 @@ ddns_domains:
         ipv4: true
         ipv6: true
 
-# Private IPv6 ULA Prefix
-ula_prefix: "fd00:1234:5678::/48"
-
-# WireGuard Server & Peer Keys
-wireguard_endpoint: "vpn.example.com"
-wireguard_port: 56789
-wireguard_gw_ip6: "fd00:1234:5678:9::1/64"
-
-wireguard_server_pubkey: "SERVER_PUBLIC_KEY_BASE64="
-vault_wg_server_privkey: "SERVER_PRIVATE_KEY_BASE64="
-
-wireguard_peers:
-  - name: "laptop"
-    pubkey: "LAPTOP_PUBLIC_KEY_BASE64="
-    privkey: "LAPTOP_PRIVATE_KEY_BASE64="
-    psk: "LAPTOP_PRESHARED_KEY_BASE64="
-    ip: "192.168.9.2/32"
-    ip6: "fd00:1234:5678:9::2/128"
-    allowed_ips: "0.0.0.0/0, ::/0"
-
-  - name: "phone"
-    pubkey: "PHONE_PUBLIC_KEY_BASE64="
-    privkey: "PHONE_PRIVATE_KEY_BASE64="
-    psk: "PHONE_PRESHARED_KEY_BASE64="
-    ip: "192.168.9.3/32"
-    ip6: "fd00:1234:5678:9::3/128"
-    allowed_ips: "0.0.0.0/0, ::/0"
-
-  - name: "admin-split"
-    pubkey: "ADMIN_SPLIT_PUBLIC_KEY_BASE64="
-    privkey: "ADMIN_SPLIT_PRIVATE_KEY_BASE64="
-    psk: "ADMIN_SPLIT_PRESHARED_KEY_BASE64="
-    ip: "192.168.9.4/32"
-    ip6: "fd00:1234:5678:9::4/128"
-    allowed_ips: "192.168.9.0/24, 192.168.10.0/24, 192.168.20.0/24, 192.168.30.0/24, 192.168.40.0/24, 192.168.41.0/24, fd00:1234:5678::/48"
+# Private IPv6 ULA Prefix Base
+ula_base: "fd00:1234:5678"

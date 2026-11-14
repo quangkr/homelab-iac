@@ -2,7 +2,8 @@
 ansible_user: root
 country_code: "VN"
 
-wireguard_gw: "192.168.9.1/24"
+wireguard_subnet: "192.168.9"
+wireguard_subnet6:  "{{ ula_base }}:9"
 default_pvid_vlan: 10
 vlans:
   - id: 10
@@ -52,5 +53,7 @@ ddns_ipv6_interface: "wan6"
 smartdns_blocklists:
   - name: "oisd_small"
     url: "https://small.oisd.nl/domainswild2"
+#   - name: "hagezi_normal"
+#     url: "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/multi-onlydomains.txt"
   - name: "hagezi_pro_mini"
-    url: "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/domains/pro.mini.txt"
+    url: "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro.mini-onlydomains.txt"

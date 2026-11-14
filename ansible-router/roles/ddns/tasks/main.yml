@@ -24,24 +24,20 @@
   changed_when: "'INSTALLED' in ddns_pkg.stdout"
 
 - name: Deploy DDNS UCI Script
-  raw: |
-    cat << 'ANSIBLE_EOF' > /etc/ansible_uci/04_ddns.uci.tmp
-    {{ lookup('template', 'uci_ddns.j2') }}
-    ANSIBLE_EOF
-    chmod 600 /etc/ansible_uci/04_ddns.uci.tmp
-    if [ ! -f /etc/ansible_uci/04_ddns.uci ] || ! cmp -s /etc/ansible_uci/04_ddns.uci.tmp /etc/ansible_uci/04_ddns.uci; then
-      mv /etc/ansible_uci/04_ddns.uci.tmp /etc/ansible_uci/04_ddns.uci
-      echo "CHANGED"
-    else
-      rm -f /etc/ansible_uci/04_ddns.uci.tmp
-    fi
-  register: uci_ddns
-  changed_when: "'CHANGED' in uci_ddns.stdout"
-  no_log: true
+  include_tasks: "{{ playbook_dir }}/tasks/deploy_template.yml"
+  vars:
+    template_src: "uci_ddns.j2"
+    dest_path: "/etc/ansible_uci/04_ddns.uci"
+    file_mode: "0600"
+    hide_log: true
 
 - name: Apply DDNS UCI Script
-  raw: "uci -q batch < /etc/ansible_uci/04_ddns.uci && uci commit ddns"
-  when: uci_ddns.changed
+  raw: |
+    set -e
+    while uci -q delete ddns.@service[0]; do :; done
+    uci batch < /etc/ansible_uci/04_ddns.uci
+    uci commit ddns
+  when: _deploy_result.changed
   notify:
     - restart_ddns
 

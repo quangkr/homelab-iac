@@ -2,7 +2,6 @@
 delete network.wan
 delete network.wan6
 delete network.wg0
-while uci -q delete network.@wireguard_wg0[0]; do :; done
 
 # Configure VLAN 10 with Static Management IP (192.168.10.[2-9])
 delete network.lan

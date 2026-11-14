@@ -1,6 +1,3 @@
-# Wipe existing DDNS service sections to prevent stale domains/subdomains
-while uci -q delete ddns.@service[0]; do :; done
-
 {% for dom in ddns_domains %}
 {% set safe_zone = dom.zone | replace('.', '_') %}
 {% for sub in dom.subdomains %}

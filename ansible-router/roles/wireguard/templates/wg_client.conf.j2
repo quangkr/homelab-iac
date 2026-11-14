@@ -1,7 +1,7 @@
 [Interface]
 PrivateKey = {{ item.privkey }}
-Address = {{ item.ip }}, {{ item.ip6 }}
-DNS = {{ wireguard_gw_ip }}
+Address = {{ wireguard_subnet }}.{{ item.ip_suffix }}, {{ wireguard_subnet6 }}::{{ item.ip_suffix }}
+DNS = {{ wireguard_subnet }}.1, {{ wireguard_subnet6 }}::1
 
 [Peer]
 PublicKey = {{ wireguard_server_pubkey }}

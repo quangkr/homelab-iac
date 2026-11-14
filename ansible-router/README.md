@@ -1,6 +1,8 @@
 # ImmortalWrt / OpenWrt Fleet Automation with Ansible
 
-Idempotent, Python-free Ansible automation for managing a mixed fleet of **ImmortalWrt** and **OpenWrt** routers and access points. Built around two-stage execution, quiet `uci -q batch` scripts, and asynchronous network reloads so any device can cleanly switch roles without residual configuration drift or premature SSH drops.
+Idempotent, Python-free Ansible automation for managing a mixed fleet of **ImmortalWrt** and **OpenWrt** routers and access points. Built around two-stage execution, quiet `uci -q batch` scripts, centralized handlers, and asynchronous network reloads so any device can cleanly switch roles without residual configuration drift or premature SSH drops.
+
+---
 
 ## Supported Device Roles
 
@@ -23,13 +25,15 @@ Any device in `inventory.yml` can be switched between three roles:
 | - | `wg0` | `192.168.9.0/24` | `:9::/64` | WireGuard VPN | Grouped into `lan` zone (full access) |
 
 ### Key Implementation Details
-* **Two-Play Execution (`site.yml`):**
-  * **Play 1 (Base System & Network):** Runs `common`, `core_router`, `dumb_ap`, and `wireless` using 100% built-in OpenWrt/ImmortalWrt packages, disables conflicting pre-installed adblock daemons (`adblock`, `adblock-fast`, `simple-adblock`), flushes the asynchronous network restart handler, and waits for SSH on the device's target role IP.
+- **Two-Play Execution (`site.yml`):**
+  * **Play 1 (Base System & Network):** Runs `common`, `core_router`, `dumb_ap`, and `wireless` using 100% built-in OpenWrt/ImmortalWrt packages, configures static DHCP leases (`dhcp_static_leases`), disables conflicting pre-installed adblock daemons (`adblock`, `adblock-fast`, `simple-adblock`), flushes shared handlers (`meta: flush_handlers`), and waits for SSH on the device's target role IP.
   * **Play 2 (Core Router Add-ons):** Targets `core_routers` only. Waits for `wan` (PPPoE) to report `"up": true`, then installs and configures `wireguard`, `ddns`, and `smartdns` via `opkg`.
-* **Per-Port VLAN Tagging (`port_vlans`):** Configured per physical port in `host_vars/<device>.yml` (`pvid` sets `:u*` untagged/PVID ingress+egress; `tagged` sets `:t`). Defaults to `default_pvid_vlan: 10` with all other VLANs tagged if omitted.
-* **IPv6 & Multi-Domain DDNS:** PPPoE `wan` uses `ipv6='manual'` paired with an explicit `wan6` (`dhcpv6`) interface. Cloudflare DDNS supports multiple zones and per-subdomain IPv4 (`wan`) / IPv6 (`wan6`) toggles.
-* **DNS & Ad-Blocking:** `smartdns` listens on port `53` (Quad9 DoH/DoT + OISD Small & HaGeZi Pro Mini `domain-set` lists via `/etc/smartdns/custom.conf`), while `dnsmasq` runs on port `5353` for DHCP and `.lan` local hostname resolution.
-* **Public-Repo Safe Vault Design:** Sensitive topology and credentials (`ula_prefix`, `ssids`, `port_forwards`, `ddns_domains`, `wireguard_port`, `wireguard_endpoint`, and all WireGuard server/peer keys) are stored in `group_vars/all/vault.yml` so Core Router failover preserves identical VPN keys.
+- **Per-Port VLAN Tagging (`port_vlans`):** Configured per physical port in `host_vars/<device>.yml` (`pvid` sets `:u*` untagged/PVID ingress+egress; `tagged` sets `:t`). Defaults to `default_pvid_vlan: 10` with all other VLANs tagged if omitted.
+- **IPv6 & Multi-Domain DDNS:** PPPoE `wan` uses `ipv6='1'` (Manual) paired with an explicit `wan6` (`dhcpv6`) interface. Cloudflare DDNS supports multiple zones and per-subdomain IPv4 (`wan`) / IPv6 (`wan6`) toggles.
+- **DNS & Ad-Blocking:** `dnsmasq` listens on port `53` across all VLANs and `wg0` for DHCP, `.lan` local hostname resolution, and client DNS, forwarding upstream queries (`noresolv='1'`) to `smartdns` on `127.0.0.1:5353` (Quad9 DoH/DoT by IP + OISD Small & HaGeZi Pro Mini `domain-set` lists via `/etc/smartdns/custom.conf`). ISP DNS (`peerdns='0'`) is disabled in Play 2 once SmartDNS is active.
+- **Split Secrets Design:**
+  * `group_vars/all/vault.yml` (Ansible Vault encrypted): PPPoE credentials, `ula_base`, `ssids`, `dhcp_static_leases`, `port_forwards`, `ddns_domains`.
+  * `group_vars/all/local_secrets.yml` (git-ignored): WireGuard port, endpoint, server private/public keys and peer definitions/keys so Core Router failover preserves identical VPN keys without cluttering the vault.
 
 ---
 
@@ -44,10 +48,11 @@ ansible-galaxy install -r requirements.yml
 sudo apt install wireguard-tools qrencode   # or: brew install wireguard-tools qrencode
 ```
 
-### 2. Configure Secrets (`vault.yml`)
-1. Copy the example vault file:
+### 2. Configure Secrets (`vault.yml` & `local_secrets.yml`)
+1. Copy the example secret files:
    ```bash
    cp group_vars/all/vault.yml.example group_vars/all/vault.yml
+   cp group_vars/all/local_secrets.yml.example group_vars/all/local_secrets.yml
    ```
 2. Generate WireGuard keys on the control node for the server and each peer:
    ```bash
@@ -57,7 +62,8 @@ sudo apt install wireguard-tools qrencode   # or: brew install wireguard-tools q
    # Peer keypair + PSK (run once per client)
    PRIV=$(wg genkey); echo "Peer Priv: $PRIV"; echo "Peer Pub:  $(echo "$PRIV" | wg pubkey)"; echo "Peer PSK:  $(wg genpsk)"
    ```
-3. Fill in `group_vars/all/vault.yml` (PPPoE credentials, ULA prefix, SSIDs/passphrases, port forwards, Cloudflare DDNS domains/tokens, and WireGuard port/endpoint/keys) and encrypt it:
+3. Populate `group_vars/all/local_secrets.yml` (git-ignored) with the WireGuard port, endpoint, server keys and `wireguard_peers` list.
+4. Fill in `group_vars/all/vault.yml` (PPPoE credentials, `ula_base`, SSIDs/passphrases, `dhcp_static_leases`, port forwards, Cloudflare DDNS domains/tokens) and encrypt it:
    ```bash
    ansible-vault encrypt group_vars/all/vault.yml
    ```
@@ -155,7 +161,7 @@ ifstatus wan && ifstatus wan6
 # Check WireGuard active peers and handshakes
 wg show
 
-# Check SmartDNS (port 53), dnsmasq (port 5353), .lan resolution, and ad-blocking
+# Check dnsmasq (port 53), SmartDNS (127.0.0.1:5353), .lan resolution, and ad-blocking
 netstat -tlulpn | grep -E '53|smartdns|dnsmasq'
 nslookup main-router.lan 127.0.0.1
 nslookup doubleclick.net 127.0.0.1

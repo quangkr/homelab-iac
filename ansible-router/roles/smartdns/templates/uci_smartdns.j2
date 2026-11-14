@@ -1,17 +1,19 @@
 # Move dnsmasq off port 53 to port 5353 so SmartDNS can bind port 53 directly
-set dhcp.@dnsmasq[0].port='5353'
-
-# Wipe existing SmartDNS config
-while uci -q delete smartdns.@smartdns[0]; do :; done
-while uci -q delete smartdns.@server[0]; do :; done
+set dhcp.@dnsmasq[0].port='53'
+set dhcp.@dnsmasq[0].noresolv='1'
+set dhcp.@dnsmasq[0].localuse='1'
+del_list dhcp.@dnsmasq[0].server='127.0.0.1#5353'
+add_list dhcp.@dnsmasq[0].server='127.0.0.1#5353'
+set network.wan.peerdns='0'
+set network.wan6.peerdns='0'
 
 set smartdns.main=smartdns
 set smartdns.main.enabled='1'
 set smartdns.main.server_name='smartdns'
-set smartdns.main.port='53'
+set smartdns.main.port='5353'
 set smartdns.main.auto_set_dnsmasq='0'
-set smartdns.main.tcp_server='1'
-set smartdns.main.ipv6_server='1'
+set smartdns.main.tcp_server='0'
+set smartdns.main.ipv6_server='0'
 set smartdns.main.dualstack_ip_selection='1'
 set smartdns.main.prefetch_domain='1'
 set smartdns.main.serve_expired='1'

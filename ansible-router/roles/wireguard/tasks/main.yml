@@ -40,26 +40,20 @@
   no_log: true
 
 - name: Deploy WireGuard UCI Script
-  raw: |
-    cat << 'ANSIBLE_EOF' > /etc/ansible_uci/06_wireguard.uci.tmp
-    {{ lookup('template', 'uci_wireguard.j2') }}
-    ANSIBLE_EOF
-    chmod 600 /etc/ansible_uci/06_wireguard.uci.tmp
-    if [ ! -f /etc/ansible_uci/06_wireguard.uci ] || ! cmp -s /etc/ansible_uci/06_wireguard.uci.tmp /etc/ansible_uci/06_wireguard.uci; then
-      mv /etc/ansible_uci/06_wireguard.uci.tmp /etc/ansible_uci/06_wireguard.uci
-      echo "CHANGED"
-    else
-      rm -f /etc/ansible_uci/06_wireguard.uci.tmp
-    fi
-  register: uci_wg
-  changed_when: "'CHANGED' in uci_wg.stdout"
-  no_log: true
+  include_tasks: "{{ playbook_dir }}/tasks/deploy_template.yml"
+  vars:
+    template_src: "uci_wireguard.j2"
+    dest_path: "/etc/ansible_uci/06_wireguard.uci"
+    file_mode: "0600"
+    hide_log: true
 
 - name: Apply WireGuard UCI Script
   raw: |
-    uci -q batch < /etc/ansible_uci/06_wireguard.uci
+    set -e
+    while uci -q delete network.@wireguard_wg0[0]; do :; done
+    uci batch < /etc/ansible_uci/06_wireguard.uci
     uci commit network
     uci commit firewall
-    /etc/init.d/firewall reload
     ifup wg0
-  when: uci_wg.changed
+    /etc/init.d/firewall reload
+  when: _deploy_result.changed

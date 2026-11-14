@@ -5,6 +5,8 @@
 - name: Play 1 - Configure Base System & Networking
   hosts: all
   gather_facts: false
+  handlers:
+    - import_tasks: handlers/main.yml
   roles:
     - role: common
     - role: core_router
@@ -12,21 +14,18 @@
     - role: dumb_ap
       when: "'dumb_aps' in group_names"
     - role: wireless
-
   post_tasks:
     - name: Flush network restart handlers before Play 2
       meta: flush_handlers
-
     - name: Point ansible_host to the target role IP after network cutover
       set_fact:
         ansible_host: "{{ '192.168.10.1' if 'core_routers' in group_names else '192.168.10.' ~ ap_ip_suffix }}"
-
     - name: Wait for router SSH to come back online after network cutover
       delegate_to: localhost
       wait_for:
         host: "{{ ansible_host }}"
         port: 22
-        delay: 4
+        delay: 10
         timeout: 60
 
 # ==============================================================================
@@ -35,6 +34,8 @@
 - name: Play 2 - Install & Configure Core Router Add-on Packages
   hosts: core_routers
   gather_facts: false
+  handlers:
+    - import_tasks: handlers/main.yml
   pre_tasks:
     - name: Wait for PPPoE WAN interface to establish internet connectivity
       raw: |
