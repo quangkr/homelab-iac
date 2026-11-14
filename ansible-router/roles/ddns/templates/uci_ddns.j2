@@ -22,7 +22,7 @@ set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.ip_source='network'
 set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.ip_network='{{ ddns_ipv4_interface }}'
 set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.interface='{{ ddns_ipv4_interface }}'
 set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.use_syslog='2'
-set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.check_interval='10'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.check_interval='5'
 set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.check_unit='minutes'
 {% endif %}
 
@@ -40,7 +40,7 @@ set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.ip_source='network'
 set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.ip_network='{{ ddns_ipv6_interface }}'
 set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.interface='{{ ddns_ipv6_interface }}'
 set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.use_syslog='2'
-set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.check_interval='10'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.check_interval='5'
 set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.check_unit='minutes'
 {% endif %}
 

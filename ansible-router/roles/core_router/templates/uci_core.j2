@@ -61,20 +61,20 @@ add_list dhcp.{{ vlan.name }}.ra_flags='other-config'
 {% endfor %}
 
 {% for lease in dhcp_static_leases | default([]) %}
-{% set lease_id = 'host_' ~ (lease.name | replace('-', '_') | replace('.', '_')) %}
-set dhcp.{{ lease_id }}=host
-set dhcp.{{ lease_id }}.name='{{ lease.name }}'
-set dhcp.{{ lease_id }}.ip='{{ lease.ip }}'
-set dhcp.{{ lease_id }}.dns='1'
+{% set lease_hostname = lease.name | regex_replace('[^a-zA-Z0-9-]', '-') | regex_replace('^-+|-+$', '') %}
+add dhcp host
+set dhcp.@host[-1].name='{{ lease_hostname }}'
+set dhcp.@host[-1].ip='{{ lease.ip }}'
+set dhcp.@host[-1].dns='1'
 {% if lease.mac is string %}
-add_list dhcp.{{ lease_id }}.mac='{{ lease.mac }}'
+add_list dhcp.@host[-1].mac='{{ lease.mac | lower }}'
 {% else %}
 {% for m in lease.mac %}
-add_list dhcp.{{ lease_id }}.mac='{{ m }}'
+add_list dhcp.@host[-1].mac='{{ m | lower }}'
 {% endfor %}
 {% endif %}
 {% if lease.leasetime is defined %}
-set dhcp.{{ lease_id }}.leasetime='{{ lease.leasetime }}'
+set dhcp.@host[-1].leasetime='{{ lease.leasetime }}'
 {% endif %}
 {% endfor %}
 

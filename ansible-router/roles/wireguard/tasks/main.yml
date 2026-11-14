@@ -54,6 +54,7 @@
     uci batch < /etc/ansible_uci/06_wireguard.uci
     uci commit network
     uci commit firewall
-    ifup wg0
-    /etc/init.d/firewall reload
   when: _deploy_result.changed
+  notify:
+    - restart_network_safe
+    - restart_dnsmasq

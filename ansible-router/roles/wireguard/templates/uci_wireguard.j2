@@ -17,8 +17,8 @@ set network.wg_peer_{{ peer.name | replace('-', '_') }}.public_key='{{ peer.pubk
 set network.wg_peer_{{ peer.name | replace('-', '_') }}.preshared_key='{{ peer.psk }}'
 set network.wg_peer_{{ peer.name | replace('-', '_') }}.route_allowed_ips='1'
 set network.wg_peer_{{ peer.name | replace('-', '_') }}.persistent_keepalive='25'
-add_list network.wg_peer_{{ peer.name | replace('-', '_') }}.allowed_ips='{{ wireguard_subnet }}.{{ peer.ip_suffix }}'
-add_list network.wg_peer_{{ peer.name | replace('-', '_') }}.allowed_ips='{{ wireguard_subnet6 }}::{{ peer.ip_suffix }}'
+add_list network.wg_peer_{{ peer.name | replace('-', '_') }}.allowed_ips='{{ wireguard_subnet }}.{{ peer.ip_suffix }}/32'
+add_list network.wg_peer_{{ peer.name | replace('-', '_') }}.allowed_ips='{{ wireguard_subnet6 }}::{{ peer.ip_suffix }}/128'
 {% endfor %}
 
 # Attach wg0 to the trusted LAN zone and allow UDP port on WAN
