@@ -78,6 +78,18 @@ set dhcp.@host[-1].leasetime='{{ lease.leasetime }}'
 {% endif %}
 {% endfor %}
 
+# Static DNS Entries (standalone @domain sections; leaves @dnsmasq[0] untouched)
+{% for entry in dhcp_static_domains | default([]) %}
+add dhcp domain
+set dhcp.@domain[-1].name='{{ entry.name }}'
+set dhcp.@domain[-1].ip='{{ entry.ip }}'
+{% if entry.ip6 is defined %}
+add dhcp domain
+set dhcp.@domain[-1].name='{{ entry.name }}'
+set dhcp.@domain[-1].ip='{{ entry.ip6 }}'
+{% endif %}
+{% endfor %}
+
 # ==========================================
 # 3. FIREWALL (Zones, Matrix & Port Forwards)
 # ==========================================

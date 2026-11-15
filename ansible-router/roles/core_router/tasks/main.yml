@@ -22,6 +22,7 @@
       while uci -q delete firewall.@${sec}[0]; do :; done
     done
     while uci -q delete dhcp.@host[0]; do :; done
+    while uci -q delete dhcp.@domain[0]; do :; done
     uci batch < /etc/ansible_uci/02_role.uci
     uci commit network
     uci commit dhcp
