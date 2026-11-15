@@ -73,13 +73,25 @@ port_forwards:
     src_dport: 80
     dest_zone: "lab"
     dest_ip: "192.168.20.2"
-    dest_port: 80
+    # dest_port: 80           # same as src_dport if omitted
   - name: "Lab_HTTPS"
     proto: "tcp"
     src_dport: 443
     dest_zone: "lab"
     dest_ip: "192.168.20.2"
     dest_port: 443
+
+ipv6_inbound_rules:
+  - name: "Lab_HTTP_v6"
+    proto: "tcp"
+    dest_zone: "lab"
+    # dest_ip: "::10/-64"     #  matches all host if omitted
+    dest_port: "80"
+  - name: "Lab_HTTPS_v6"
+    proto: "tcp"
+    dest_zone: "lab"
+    dest_ip: "::10/-64"       # matches host suffix ::10 regardless of ISP /56 or /64 prefix
+    dest_port: "443"
 
 ddns_domains:
   - zone: "example.com"

@@ -220,20 +220,30 @@ set firewall.allow_wan_ping.src='wan'
 set firewall.allow_wan_ping.proto='icmp'
 set firewall.allow_wan_ping.target='ACCEPT'
 
-# Allow inbound connections from Internet to Lab VLAN (IPv6 / direct routing)
-set firewall.allow_wan_to_lab=forwarding
-set firewall.allow_wan_to_lab.src='wan'
-set firewall.allow_wan_to_lab.dest='lab'
+# IPv4 Port Forwards (automatically allowed through forward_wan via DNAT)
+{% for pf in port_forwards | default([]) %}
+add firewall redirect
+set firewall.@redirect[-1].name='{{ pf.name }}'
+set firewall.@redirect[-1].proto='{{ pf.proto | default("tcp") }}'
+set firewall.@redirect[-1].target='DNAT'
+set firewall.@redirect[-1].src='wan'
+set firewall.@redirect[-1].src_dport='{{ pf.src_dport }}'
+set firewall.@redirect[-1].dest='{{ pf.dest_zone | default("lab") }}'
+set firewall.@redirect[-1].dest_ip='{{ pf.dest_ip }}'
+set firewall.@redirect[-1].dest_port='{{ pf.dest_port | default(pf.src_dport) }}'
+{% endfor %}
 
-# --- Port Forwards (DNAT TCP 80/443 -> 192.168.20.10) ---
-{% for pf in port_forwards %}
-set firewall.pf_{{ pf.name }}=redirect
-set firewall.pf_{{ pf.name }}.name='{{ pf.name }}'
-set firewall.pf_{{ pf.name }}.target='DNAT'
-set firewall.pf_{{ pf.name }}.src='wan'
-set firewall.pf_{{ pf.name }}.dest='{{ pf.dest_zone }}'
-set firewall.pf_{{ pf.name }}.proto='{{ pf.proto }}'
-set firewall.pf_{{ pf.name }}.src_dport='{{ pf.src_dport }}'
-set firewall.pf_{{ pf.name }}.dest_ip='{{ pf.dest_ip }}'
-set firewall.pf_{{ pf.name }}.dest_port='{{ pf.dest_port }}'
+# IPv6 Inbound Traffic Rules (selected ports only; no blanket wan -> lab forwarding)
+{% for rule in ipv6_inbound_rules | default([]) %}
+add firewall rule
+set firewall.@rule[-1].name='{{ rule.name }}'
+set firewall.@rule[-1].proto='{{ rule.proto | default("tcp") }}'
+set firewall.@rule[-1].family='ipv6'
+set firewall.@rule[-1].target='ACCEPT'
+set firewall.@rule[-1].src='wan'
+set firewall.@rule[-1].dest='{{ rule.dest_zone | default("lab") }}'
+{% if rule.dest_ip is defined %}
+set firewall.@rule[-1].dest_ip='{{ rule.dest_ip }}'
+{% endif %}
+set firewall.@rule[-1].dest_port='{{ rule.dest_port }}'
 {% endfor %}
