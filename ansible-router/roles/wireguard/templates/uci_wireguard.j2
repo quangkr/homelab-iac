@@ -5,7 +5,7 @@ delete network.wg0
 
 set network.wg0=interface
 set network.wg0.proto='wireguard'
-set network.wg0.private_key='{{ vault_wg_server_privkey }}'
+set network.wg0.private_key='{{ wireguard_server_privkey }}'
 set network.wg0.listen_port='{{ wireguard_port }}'
 add_list network.wg0.addresses='{{ wireguard_subnet }}.1/24'
 add_list network.wg0.addresses='{{ wireguard_subnet6 }}::1/64'

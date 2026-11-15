@@ -8,20 +8,26 @@ dhcp_static_leases:
   - name: "home-server"
     mac: "aa:bb:cc:dd:ee:01"
     ip: "192.168.10.10"
+    # Optional: hex interface ID for stateful DHCPv6 (assigns <prefix>::10 to match ::10/-64 firewall rules)
+    hostid: "10"
   - name: "nas"
     mac: "aa:bb:cc:dd:ee:02"
     ip: "192.168.10.20"
+    hostid: "20"
   - name: "smart-tv"
     mac: "aa:bb:cc:dd:ee:03"
     ip: "192.168.30.50"
+    hostid: "50"
 
 dhcp_static_domains:
   - name: "jellyfin.example.com"
     ip: "192.168.20.10"
+    # Optional: assign an internal ULA IPv6 address so local clients connect over IPv6 internally
+    ip6: "fd00:1234:5678:20::10"
   - name: "ha.example.com"
     ip: "192.168.20.20"
-    # Optional: include ip6 (either an internal ULA address or "::") so local clients
-    # do not fall back to a public Cloudflare AAAA record
+    # Optional: set ip6 to "::" to return an empty NODATA response for AAAA queries,
+    # preventing local clients from falling back to a public Cloudflare AAAA record
     ip6: "::"
 
 ssids:
@@ -123,6 +129,9 @@ ddns_domains:
     subdomains:
       - name: "@"
       - name: "*.home"
+        # Optional: concrete FQDN queried by ddns-scripts to check current public IP
+        # (prevents NXDOMAIN every 5 minutes if bare "home.example.net" has no record)
+        lookup_host: "ddns-check.home.example.net"
         ipv4: true
         ipv6: true
 

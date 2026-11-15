@@ -1,10 +1,10 @@
 # Remove any residual Core Router WAN / WG interfaces and peers
 delete network.wan
 delete network.wan6
-delete network.wg0
 
 # Configure VLAN 10 with Static Management IP (192.168.10.[2-9])
 delete network.lan
+delete network.lan6
 set network.lan=interface
 set network.lan.device='br-lan.10'
 set network.lan.proto='static'
@@ -12,8 +12,12 @@ set network.lan.ipaddr='192.168.10.{{ ap_ip_suffix }}'
 set network.lan.netmask='255.255.255.0'
 set network.lan.gateway='192.168.10.1'
 add_list network.lan.dns='192.168.10.1'
-set network.lan.ip6assign='64'
-set network.lan.ip6hint='a'
+
+set network.lan6=interface
+set network.lan6.device='@lan'
+set network.lan6.proto='dhcpv6'
+set network.lan6.reqaddress='try'
+set network.lan6.reqprefix='no'
 
 # Configure VLANs 20, 30, 40, 41 as Unmanaged Layer-2 Bridges for Wi-Fi SSIDs
 {% for vlan in vlans if vlan.id != 10 %}
@@ -22,6 +26,10 @@ set network.{{ vlan.name }}=interface
 set network.{{ vlan.name }}.device='br-lan.{{ vlan.id }}'
 set network.{{ vlan.name }}.proto='none'
 {% endfor %}
+
+# Remove SmartDNS upstream forwarder and re-enable standard resolv.conf if dnsmasq ever runs
+set dhcp.@dnsmasq[0].noresolv='0'
+del_list dhcp.@dnsmasq[0].server='127.0.0.1#5353'
 
 # Ignore DHCP on all interfaces in case dnsmasq is ever manually started
 {% for vlan in vlans %}

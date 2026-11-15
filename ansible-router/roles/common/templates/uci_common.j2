@@ -14,6 +14,8 @@ set network.globals=globals
 set network.globals.ula_prefix='{{ ula_base }}::/48'
 
 # --- Main DSA VLAN-Filtering Bridge (br-lan) ---
+delete network.@device[0]
+delete network.br_lan
 set network.br_lan=device
 set network.br_lan.name='br-lan'
 set network.br_lan.type='bridge'
@@ -26,6 +28,7 @@ add_list network.br_lan.ports='{{ port }}'
 # --- Per-Port 802.1Q Bridge VLAN Membership ---
 {% set port_map = port_vlans | default({}) %}
 {% for vlan in vlans %}
+delete network.vlan_{{ vlan.id }}
 set network.vlan_{{ vlan.id }}=bridge-vlan
 set network.vlan_{{ vlan.id }}.device='br-lan'
 set network.vlan_{{ vlan.id }}.vlan='{{ vlan.id }}'
@@ -33,7 +36,7 @@ set network.vlan_{{ vlan.id }}.vlan='{{ vlan.id }}'
 {% set p_cfg = port_map[port] if port in port_map else {'pvid': default_pvid_vlan | default(10), 'tagged': 'all'} %}
 {% if p_cfg.pvid is defined and p_cfg.pvid == vlan.id %}
 add_list network.vlan_{{ vlan.id }}.ports='{{ port }}:u*'
-{% elif p_cfg.tagged is defined and (p_cfg.tagged == 'all' or (p_cfg.tagged is iterable and vlan.id in p_cfg.tagged)) %}
+{% elif p_cfg.tagged is defined and (p_cfg.tagged == 'all' or (p_cfg.tagged is sequence and p_cfg.tagged is not string and vlan.id in p_cfg.tagged)) %}
 add_list network.vlan_{{ vlan.id }}.ports='{{ port }}:t'
 {% endif %}
 {% endfor %}

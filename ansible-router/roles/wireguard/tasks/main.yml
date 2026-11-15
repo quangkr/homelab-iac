@@ -43,18 +43,6 @@
   include_tasks: "{{ playbook_dir }}/tasks/deploy_template.yml"
   vars:
     template_src: "uci_wireguard.j2"
-    dest_path: "/etc/ansible_uci/06_wireguard.uci"
+    dest_path: "/etc/ansible_uci/20_10_wireguard.uci"
     file_mode: "0600"
     hide_log: true
-
-- name: Apply WireGuard UCI Script
-  raw: |
-    set -e
-    while uci -q delete network.@wireguard_wg0[0]; do :; done
-    uci batch < /etc/ansible_uci/06_wireguard.uci
-    uci commit network
-    uci commit firewall
-  when: _deploy_result.changed
-  notify:
-    - restart_network_safe
-    - restart_dnsmasq

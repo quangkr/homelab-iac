@@ -6,8 +6,8 @@
 {% set enable_v6 = sub.ipv6 if sub.ipv6 is defined else (dom.ipv6 | default(false)) %}
 {% set safe_sub = sub_name | replace('@', 'root') | replace('*', 'wildcard') | replace('.', '_') %}
 {% set cf_domain = '@' ~ dom.zone if sub_name == '@' else sub_name ~ '@' ~ dom.zone %}
-{% set lookup_fqdn = dom.zone if sub_name == '@' else (sub_name | replace('*.', '')) ~ '.' ~ dom.zone %}
-
+{% set default_lookup = dom.zone if sub_name == '@' else (sub_name | replace('*.', '')) ~ '.' ~ dom.zone %}
+{% set lookup_fqdn = sub.lookup_host | default(default_lookup) %}
 {% if enable_v4 %}
 # --- IPv4 (A Record): {{ lookup_fqdn }} ---
 set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}=service
@@ -24,6 +24,9 @@ set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.interface='{{ ddns_ipv4_interface 
 set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.use_syslog='2'
 set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.check_interval='5'
 set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.check_unit='minutes'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.dns_server='1.1.1.1'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.use_https='1'
+set ddns.cf_v4_{{ safe_zone }}_{{ safe_sub }}.cacert='/etc/ssl/certs/ca-certificates.crt'
 {% endif %}
 
 {% if enable_v6 %}
@@ -42,6 +45,9 @@ set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.interface='{{ ddns_ipv6_interface 
 set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.use_syslog='2'
 set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.check_interval='5'
 set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.check_unit='minutes'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.dns_server='1.1.1.1'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.use_https='1'
+set ddns.cf_v6_{{ safe_zone }}_{{ safe_sub }}.cacert='/etc/ssl/certs/ca-certificates.crt'
 {% endif %}
 
 {% endfor %}

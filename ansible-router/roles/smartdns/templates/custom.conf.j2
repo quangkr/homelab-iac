@@ -1,6 +1,6 @@
-# Forward local .lan DHCP hostnames to dnsmasq on port 5353
+# Forward local .home.arpa DHCP hostnames to dnsmasq on port 5353
 # server 127.0.0.1:5353 -group local_lan -exclude-default-group
-# domain-rules /lan/ -nameserver local_lan
+# domain-rules /home.arpa/ -nameserver local_lan
 
 # Load Ad-Blocking Blocklists via domain-set
 {% for bl in smartdns_blocklists %}

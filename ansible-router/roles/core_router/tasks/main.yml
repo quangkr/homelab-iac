@@ -11,24 +11,6 @@
   include_tasks: "{{ playbook_dir }}/tasks/deploy_template.yml"
   vars:
     template_src: "uci_core.j2"
-    dest_path: "/etc/ansible_uci/02_role.uci"
+    dest_path: "/etc/ansible_uci/10_20_core_router.uci"
     file_mode: "0600"
     hide_log: true
-
-- name: Apply Core Router UCI Script
-  raw: |
-    set -e
-    for sec in defaults zone forwarding rule redirect; do
-      while uci -q delete firewall.@${sec}[0]; do :; done
-    done
-    while uci -q delete dhcp.@host[0]; do :; done
-    while uci -q delete dhcp.@domain[0]; do :; done
-    uci batch < /etc/ansible_uci/02_role.uci
-    uci commit network
-    uci commit dhcp
-    uci commit firewall
-  when: _deploy_result.changed
-  notify:
-    - restart_network_safe
-    - restart_dnsmasq
-    - restart_odhcpd

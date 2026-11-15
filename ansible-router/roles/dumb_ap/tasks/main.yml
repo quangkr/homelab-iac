@@ -13,17 +13,6 @@
   include_tasks: "{{ playbook_dir }}/tasks/deploy_template.yml"
   vars:
     template_src: "uci_dumb_ap.j2"
-    dest_path: "/etc/ansible_uci/02_role.uci"
+    dest_path: "/etc/ansible_uci/10_20_dumb_ap.uci"
     file_mode: "0600"
     hide_log: true
-
-- name: Apply Dumb AP UCI Script
-  raw: |
-    set -e
-    while uci -q delete network.@wireguard_wg0[0]; do :; done
-    uci batch < /etc/ansible_uci/02_role.uci
-    uci commit network
-    uci commit dhcp
-  when: _deploy_result.changed
-  notify:
-    - restart_network_safe

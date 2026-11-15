@@ -15,26 +15,26 @@ set wireless.{{ radio_name }}.disabled='1'
 {% for radio_name, radio_cfg in radios.items() %}
 {% if radio_cfg.band in ssid_cfg.band_ssids %}
 {% set sec = 'wifinet_' ~ (ssid_cfg.id | replace('-', '_') | replace(' ', '_')) ~ '_' ~ radio_cfg.band %}
-set wireless.wifinet_{{ sec }}=wifi-iface
-set wireless.wifinet_{{ sec }}.device='{{ radio_name }}'
-set wireless.wifinet_{{ sec }}.mode='ap'
-set wireless.wifinet_{{ sec }}.ssid='{{ ssid_cfg.band_ssids[radio_cfg.band] }}'
-set wireless.wifinet_{{ sec }}.network='{{ ssid_cfg.network }}'
-set wireless.wifinet_{{ sec }}.encryption='{{ ssid_cfg.encryption }}'
-set wireless.wifinet_{{ sec }}.key='{{ ssid_cfg.key }}'
-set wireless.wifinet_{{ sec }}.hidden='{{ 1 if ssid_cfg.hidden else 0 }}'
+set wireless.{{ sec }}=wifi-iface
+set wireless.{{ sec }}.device='{{ radio_name }}'
+set wireless.{{ sec }}.mode='ap'
+set wireless.{{ sec }}.ssid='{{ ssid_cfg.band_ssids[radio_cfg.band] }}'
+set wireless.{{ sec }}.network='{{ ssid_cfg.network }}'
+set wireless.{{ sec }}.encryption='{{ ssid_cfg.encryption }}'
+set wireless.{{ sec }}.key='{{ ssid_cfg.key }}'
+set wireless.{{ sec }}.hidden='{{ 1 if ssid_cfg.hidden else 0 }}'
 {% if ssid_cfg.encryption == 'sae-mixed' %}
 # Required for WPA2/WPA3 mixed mode: 1 = optional (allows both WPA2 and WPA3 clients)
-set wireless.wifinet_{{ sec }}.ieee80211w='1'
+set wireless.{{ sec }}.ieee80211w='1'
 {% elif ssid_cfg.encryption == 'sae' %}
 # Required for pure WPA3: 2 = mandatory
-set wireless.wifinet_{{ sec }}.ieee80211w='2'
+set wireless.{{ sec }}.ieee80211w='2'
 {% endif %}
 {% if ssid_cfg.ieee80211r | default(false) %}
-set wireless.wifinet_{{ sec }}.ieee80211r='1'
-set wireless.wifinet_{{ sec }}.mobility_domain='{{ ssid_cfg.mobility_domain }}'
-set wireless.wifinet_{{ sec }}.ft_over_ds='0'
-set wireless.wifinet_{{ sec }}.ft_psk_generate_local='1'
+set wireless.{{ sec }}.ieee80211r='1'
+set wireless.{{ sec }}.mobility_domain='{{ ssid_cfg.mobility_domain }}'
+set wireless.{{ sec }}.ft_over_ds='0'
+set wireless.{{ sec }}.ft_psk_generate_local='1'
 {% endif %}
 {% endif %}
 {% endfor %}

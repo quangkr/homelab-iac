@@ -1,5 +1,6 @@
 #!/bin/sh
 {% for bl in smartdns_blocklists %}
-wget -qO /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp "{{ bl.url }}" && mv /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp /etc/smartdns/blocklists/{{ bl.name }}.conf
+wget -qO /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp "{{ bl.url }}"
+[ -s /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp ] && mv /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp /etc/smartdns/blocklists/{{ bl.name }}.conf
 {% endfor %}
 /etc/init.d/smartdns restart

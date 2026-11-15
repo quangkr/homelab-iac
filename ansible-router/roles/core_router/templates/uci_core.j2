@@ -3,6 +3,7 @@
 # ==========================================
 delete network.wan
 delete network.wan6
+delete network.lan6
 set network.wan=interface
 {% if wan_vlan_tag is defined and wan_vlan_tag != 'none' %}
 set network.wan.device='{{ wan_port }}.{{ wan_vlan_tag }}'
@@ -15,11 +16,13 @@ set network.wan.password='{{ vault_pppoe_pass }}'
 # set network.wan.ipv6='manual'
 set network.wan.ipv6='1'
 set network.wan.multipath='off'
+set network.wan.peerdns='0'
 set network.wan6=interface
 set network.wan6.device='@wan'
 set network.wan6.proto='dhcpv6'
 set network.wan6.reqaddress='try'
 set network.wan6.reqprefix='auto'
+set network.wan6.peerdns='0'
 
 {% for vlan in vlans %}
 delete network.{{ vlan.name }}
@@ -35,16 +38,22 @@ set network.{{ vlan.name }}.ip6hint='{{ vlan.ip6hint }}'
 # ==========================================
 # 2. DHCP & ODHCPD
 # ==========================================
+set dhcp.@dnsmasq[0].port='53'
+set dhcp.@dnsmasq[0].noresolv='1'
+set dhcp.@dnsmasq[0].localuse='1'
 set dhcp.@dnsmasq[0].domainneeded='1'
 set dhcp.@dnsmasq[0].localise_queries='1'
 set dhcp.@dnsmasq[0].rebind_protection='1'
 set dhcp.@dnsmasq[0].rebind_localhost='1'
-set dhcp.@dnsmasq[0].local='/lan/'
-set dhcp.@dnsmasq[0].domain='lan'
+set dhcp.@dnsmasq[0].local='/home.arpa/'
+set dhcp.@dnsmasq[0].domain='home.arpa'
 set dhcp.@dnsmasq[0].expandhosts='1'
 set dhcp.@dnsmasq[0].authoritative='1'
 set dhcp.@dnsmasq[0].readethers='1'
 set dhcp.@dnsmasq[0].leasefile='/tmp/dhcp.leases'
+del_list dhcp.@dnsmasq[0].server='127.0.0.1#5353'
+del_list dhcp.@dnsmasq[0].server='9.9.9.9'
+add_list dhcp.@dnsmasq[0].server='9.9.9.9'
 
 {% for vlan in vlans %}
 delete dhcp.{{ vlan.name }}
@@ -61,32 +70,43 @@ add_list dhcp.{{ vlan.name }}.ra_flags='other-config'
 {% endfor %}
 
 {% for lease in dhcp_static_leases | default([]) %}
-{% set lease_hostname = lease.name | regex_replace('[^a-zA-Z0-9-]', '-') | regex_replace('^-+|-+$', '') %}
-add dhcp host
-set dhcp.@host[-1].name='{{ lease_hostname }}'
-set dhcp.@host[-1].ip='{{ lease.ip }}'
-set dhcp.@host[-1].dns='1'
+{% set lease_hostname = lease.name | regex_replace('[^a-zA-Z0-9-]', '-') | regex_replace('^-+|-+$', '') | default('dhcp-host-' ~ loop.index, true) %}
+{% set lease_id = lease_hostname | replace('-', '_') %}
+set dhcp.host_{{ lease_id }}=host
+set dhcp.host_{{ lease_id }}.name='{{ lease_hostname }}'
+set dhcp.host_{{ lease_id }}.ip='{{ lease.ip }}'
+set dhcp.host_{{ lease_id }}.dns='1'
+{% if lease.hostid is defined %}
+set dhcp.host_{{ lease_id }}.hostid='{{ lease.hostid }}'
+{% endif %}
 {% if lease.mac is string %}
-add_list dhcp.@host[-1].mac='{{ lease.mac | lower }}'
+add_list dhcp.host_{{ lease_id }}.mac='{{ lease.mac | lower }}'
 {% else %}
 {% for m in lease.mac %}
-add_list dhcp.@host[-1].mac='{{ m | lower }}'
+add_list dhcp.host_{{ lease_id }}.mac='{{ m | lower }}'
 {% endfor %}
 {% endif %}
 {% if lease.leasetime is defined %}
-set dhcp.@host[-1].leasetime='{{ lease.leasetime }}'
+set dhcp.host_{{ lease_id }}.leasetime='{{ lease.leasetime }}'
 {% endif %}
 {% endfor %}
 
-# Static DNS Entries (standalone @domain sections; leaves @dnsmasq[0] untouched)
+# Static Split-DNS Entries (blocks public Cloudflare AAAA leaks via NODATA when ip6 == '::')
 {% for entry in dhcp_static_domains | default([]) %}
-add dhcp domain
-set dhcp.@domain[-1].name='{{ entry.name }}'
-set dhcp.@domain[-1].ip='{{ entry.ip }}'
+{% set domain_id = entry.name | regex_replace('[^a-zA-Z0-9_]', '_') | default('static_domain_' ~ loop.index, true) %}
+set dhcp.domain_{{ domain_id }}=domain
+set dhcp.domain_{{ domain_id }}.name='{{ entry.name }}'
+set dhcp.domain_{{ domain_id }}.ip='{{ entry.ip }}'
 {% if entry.ip6 is defined %}
-add dhcp domain
-set dhcp.@domain[-1].name='{{ entry.name }}'
-set dhcp.@domain[-1].ip='{{ entry.ip6 }}'
+{% if entry.ip6 == '::' %}
+# Authoritative local-only zone for this FQDN: returns NODATA for AAAA, HTTPS (type 65), etc.
+del_list dhcp.@dnsmasq[0].server='/{{ entry.name }}/'
+add_list dhcp.@dnsmasq[0].server='/{{ entry.name }}/'
+{% else %}
+set dhcp.domain6_{{ domain_id }}=domain
+set dhcp.domain6_{{ domain_id }}.name='{{ entry.name }}'
+set dhcp.domain6_{{ domain_id }}.ip='{{ entry.ip6 }}'
+{% endif %}
 {% endif %}
 {% endfor %}
 
@@ -160,10 +180,13 @@ set firewall.fwd_lan_{{ dst }}.src='lan'
 set firewall.fwd_lan_{{ dst }}.dest='{{ dst }}'
 {% endfor %}
 
-# VLAN 20 (lab): Can access Internet, no access to other VLANs
+# VLAN 20 (lab): Can access Internet and IoT, isolated from other VLANs
 set firewall.fwd_lab_wan=forwarding
 set firewall.fwd_lab_wan.src='lab'
 set firewall.fwd_lab_wan.dest='wan'
+set firewall.fwd_lab_iot=forwarding
+set firewall.fwd_lab_iot.src='lab'
+set firewall.fwd_lab_iot.dest='iot'
 
 # VLAN 30 (guest): Can access Internet & Lab VLAN
 set firewall.fwd_guest_wan=forwarding
@@ -173,18 +196,12 @@ set firewall.fwd_guest_lab=forwarding
 set firewall.fwd_guest_lab.src='guest'
 set firewall.fwd_guest_lab.dest='lab'
 
-# VLAN 40 (iot): No Internet, Can access Lab VLAN
-set firewall.fwd_iot_lab=forwarding
-set firewall.fwd_iot_lab.src='iot'
-set firewall.fwd_iot_lab.dest='lab'
+# VLAN 40 (iot): No Internet
 
-# VLAN 41 (iot_pub): Can access Internet & Lab VLAN
+# VLAN 41 (iot_pub): Can access Internet
 set firewall.fwd_iot_pub_wan=forwarding
 set firewall.fwd_iot_pub_wan.src='iot_pub'
 set firewall.fwd_iot_pub_wan.dest='wan'
-set firewall.fwd_iot_pub_lab=forwarding
-set firewall.fwd_iot_pub_lab.src='iot_pub'
-set firewall.fwd_iot_pub_lab.dest='lab'
 
 # --- Essential DHCP & DNS Input Rules for Restricted Zones ---
 {% for z in ['lab', 'guest', 'iot', 'iot_pub'] %}
@@ -207,6 +224,13 @@ set firewall.allow_icmp_{{ z }}.name='Allow-ICMP-{{ z }}'
 set firewall.allow_icmp_{{ z }}.src='{{ z }}'
 set firewall.allow_icmp_{{ z }}.proto='icmp'
 set firewall.allow_icmp_{{ z }}.target='ACCEPT'
+
+set firewall.allow_icmpv6_{{ z }}=rule
+set firewall.allow_icmpv6_{{ z }}.name='Allow-ICMPv6-{{ z }}'
+set firewall.allow_icmpv6_{{ z }}.src='{{ z }}'
+set firewall.allow_icmpv6_{{ z }}.proto='icmpv6'
+set firewall.allow_icmpv6_{{ z }}.family='ipv6'
+set firewall.allow_icmpv6_{{ z }}.target='ACCEPT'
 {% endfor %}
 
 # --- Standard WAN Input Rules ---
@@ -230,32 +254,46 @@ set firewall.allow_wan_ping=rule
 set firewall.allow_wan_ping.name='Allow-Ping'
 set firewall.allow_wan_ping.src='wan'
 set firewall.allow_wan_ping.proto='icmp'
+set firewall.allow_wan_ping.family='ipv4'
 set firewall.allow_wan_ping.target='ACCEPT'
+
+set firewall.allow_wan_icmpv6=rule
+set firewall.allow_wan_icmpv6.name='Allow-ICMPv6-Input'
+set firewall.allow_wan_icmpv6.src='wan'
+set firewall.allow_wan_icmpv6.proto='icmpv6'
+set firewall.allow_wan_icmpv6.family='ipv6'
+set firewall.allow_wan_icmpv6.limit='1000/sec'
+set firewall.allow_wan_icmpv6.target='ACCEPT'
+{% for t in ['echo-request', 'echo-reply', 'destination-unreachable', 'packet-too-big', 'time-exceeded', 'bad-header', 'unknown-header-type', 'router-solicitation', 'neighbour-solicitation', 'router-advertisement', 'neighbour-advertisement'] %}
+add_list firewall.allow_wan_icmpv6.icmp_type='{{ t }}'
+{% endfor %}
 
 # IPv4 Port Forwards (automatically allowed through forward_wan via DNAT)
 {% for pf in port_forwards | default([]) %}
-add firewall redirect
-set firewall.@redirect[-1].name='{{ pf.name }}'
-set firewall.@redirect[-1].proto='{{ pf.proto | default("tcp") }}'
-set firewall.@redirect[-1].target='DNAT'
-set firewall.@redirect[-1].src='wan'
-set firewall.@redirect[-1].src_dport='{{ pf.src_dport }}'
-set firewall.@redirect[-1].dest='{{ pf.dest_zone | default("lab") }}'
-set firewall.@redirect[-1].dest_ip='{{ pf.dest_ip }}'
-set firewall.@redirect[-1].dest_port='{{ pf.dest_port | default(pf.src_dport) }}'
+{% set redirect_id = pf.name | regex_replace('[^a-zA-Z0-9_]', '_') | lower | default('pf_' ~ loop.index, true) %}
+set firewall.redirect_{{ redirect_id }}=redirect
+set firewall.redirect_{{ redirect_id }}.name='{{ pf.name }}'
+set firewall.redirect_{{ redirect_id }}.proto='{{ pf.proto | default("tcp") }}'
+set firewall.redirect_{{ redirect_id }}.target='DNAT'
+set firewall.redirect_{{ redirect_id }}.src='wan'
+set firewall.redirect_{{ redirect_id }}.src_dport='{{ pf.src_dport }}'
+set firewall.redirect_{{ redirect_id }}.dest='{{ pf.dest_zone | default("lab") }}'
+set firewall.redirect_{{ redirect_id }}.dest_ip='{{ pf.dest_ip }}'
+set firewall.redirect_{{ redirect_id }}.dest_port='{{ pf.dest_port | default(pf.src_dport) }}'
 {% endfor %}
 
 # IPv6 Inbound Traffic Rules (selected ports only; no blanket wan -> lab forwarding)
 {% for rule in ipv6_inbound_rules | default([]) %}
-add firewall rule
-set firewall.@rule[-1].name='{{ rule.name }}'
-set firewall.@rule[-1].proto='{{ rule.proto | default("tcp") }}'
-set firewall.@rule[-1].family='ipv6'
-set firewall.@rule[-1].target='ACCEPT'
-set firewall.@rule[-1].src='wan'
-set firewall.@rule[-1].dest='{{ rule.dest_zone | default("lab") }}'
+{% set rule_id = rule.name | regex_replace('[^a-zA-Z0-9_]', '_') | lower | default('rule_' ~ loop.index, true) %}
+set firewall.rule_{{ rule_id }}=rule
+set firewall.rule_{{ rule_id }}.name='{{ rule.name }}'
+set firewall.rule_{{ rule_id }}.proto='{{ rule.proto | default("tcp") }}'
+set firewall.rule_{{ rule_id }}.family='ipv6'
+set firewall.rule_{{ rule_id }}.target='ACCEPT'
+set firewall.rule_{{ rule_id }}.src='wan'
+set firewall.rule_{{ rule_id }}.dest='{{ rule.dest_zone | default("lab") }}'
 {% if rule.dest_ip is defined %}
-set firewall.@rule[-1].dest_ip='{{ rule.dest_ip }}'
+set firewall.rule_{{ rule_id }}.dest_ip='{{ rule.dest_ip }}'
 {% endif %}
-set firewall.@rule[-1].dest_port='{{ rule.dest_port }}'
+set firewall.rule_{{ rule_id }}.dest_port='{{ rule.dest_port }}'
 {% endfor %}

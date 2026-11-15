@@ -1,11 +1,10 @@
-# Move dnsmasq off port 53 to port 5353 so SmartDNS can bind port 53 directly
+# Add SmartDNS as dnsmasq upstream
 set dhcp.@dnsmasq[0].port='53'
 set dhcp.@dnsmasq[0].noresolv='1'
 set dhcp.@dnsmasq[0].localuse='1'
+del_list dhcp.@dnsmasq[0].server='9.9.9.9'
 del_list dhcp.@dnsmasq[0].server='127.0.0.1#5353'
 add_list dhcp.@dnsmasq[0].server='127.0.0.1#5353'
-set network.wan.peerdns='0'
-set network.wan6.peerdns='0'
 
 set smartdns.main=smartdns
 set smartdns.main.enabled='1'
@@ -18,9 +17,10 @@ set smartdns.main.dualstack_ip_selection='1'
 set smartdns.main.prefetch_domain='1'
 set smartdns.main.serve_expired='1'
 set smartdns.main.cache_size='16384'
+del_list smartdns.main.conf_files='/etc/smartdns/custom.conf'
 add_list smartdns.main.conf_files='/etc/smartdns/custom.conf'
 
-# Upstream 1: Quad9 DoT (9.9.9.9)
+# Upstream: Quad9 DoT (9.9.9.9)
 set smartdns.quad9_dot=server
 set smartdns.quad9_dot.enabled='1'
 set smartdns.quad9_dot.name='Quad9_DoT'
@@ -30,7 +30,17 @@ set smartdns.quad9_dot.type='tls'
 set smartdns.quad9_dot.tls_host_verify='dns.quad9.net'
 set smartdns.quad9_dot.http_host='dns.quad9.net'
 
-# Upstream 2: Quad9 DoH (9.9.9.9)
+# Upstream: Quad9 DoT (149.112.112.112)
+set smartdns.quad9_dot_alt=server
+set smartdns.quad9_dot_alt.enabled='1'
+set smartdns.quad9_dot_alt.name='Quad9_DoT_Alt'
+set smartdns.quad9_dot_alt.ip='149.112.112.112'
+set smartdns.quad9_dot_alt.port='853'
+set smartdns.quad9_dot_alt.type='tls'
+set smartdns.quad9_dot_alt.tls_host_verify='dns.quad9.net'
+set smartdns.quad9_dot_alt.http_host='dns.quad9.net'
+
+# Upstream: Quad9 DoH (9.9.9.9)
 set smartdns.quad9_doh=server
 set smartdns.quad9_doh.enabled='1'
 set smartdns.quad9_doh.name='Quad9_DoH'
@@ -38,3 +48,12 @@ set smartdns.quad9_doh.ip='https://9.9.9.9/dns-query'
 set smartdns.quad9_doh.type='https'
 set smartdns.quad9_doh.tls_host_verify='dns.quad9.net'
 set smartdns.quad9_doh.http_host='dns.quad9.net'
+
+# Upstream: Quad9 DoH (149.112.112.112)
+set smartdns.quad9_doh_alt=server
+set smartdns.quad9_doh_alt.enabled='1'
+set smartdns.quad9_doh_alt.name='Quad9_DoH_Alt'
+set smartdns.quad9_doh_alt.ip='https://149.112.112.112/dns-query'
+set smartdns.quad9_doh_alt.type='https'
+set smartdns.quad9_doh_alt.tls_host_verify='dns.quad9.net'
+set smartdns.quad9_doh_alt.http_host='dns.quad9.net'

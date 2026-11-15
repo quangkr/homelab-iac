@@ -27,22 +27,6 @@
   include_tasks: "{{ playbook_dir }}/tasks/deploy_template.yml"
   vars:
     template_src: "uci_ddns.j2"
-    dest_path: "/etc/ansible_uci/04_ddns.uci"
+    dest_path: "/etc/ansible_uci/20_30_ddns.uci"
     file_mode: "0600"
     hide_log: true
-
-- name: Apply DDNS UCI Script
-  raw: |
-    set -e
-    while uci -q delete ddns.@service[0]; do :; done
-    uci batch < /etc/ansible_uci/04_ddns.uci
-    uci commit ddns
-  when: _deploy_result.changed
-  notify:
-    - restart_ddns
-
-- name: Enable and start DDNS service
-  raw: |
-    /etc/init.d/ddns enabled || /etc/init.d/ddns enable
-    /etc/init.d/ddns running || /etc/init.d/ddns start
-  changed_when: false
