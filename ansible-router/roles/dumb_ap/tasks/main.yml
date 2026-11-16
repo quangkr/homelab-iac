@@ -1,7 +1,7 @@
 ---
-- name: Stop and disable router-only services on Dumb AP
+- name: Stop and disable built-in router services on Dumb AP
   raw: |
-    for svc in dnsmasq odhcpd firewall ddns smartdns; do
+    for svc in dnsmasq odhcpd firewall; do
       if [ -x "/etc/init.d/$svc" ]; then
         /etc/init.d/$svc stop || true
         /etc/init.d/$svc disable || true

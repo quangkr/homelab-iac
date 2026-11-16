@@ -1,20 +1,36 @@
 ---
 # ==============================================================================
-# SINGLE PLAY: Base Network, Wireless & Core Router Add-ons
+# SINGLE PLAY: Base Network, Wireless & Core Router Add-ons (Reset-Gated)
 # ==============================================================================
 - name: Configure OpenWrt / ImmortalWrt Fleet
   hosts: all
   gather_facts: false
 
   pre_tasks:
+    - name: Validate exclusive inventory role membership
+      assert:
+        that:
+          - "('core_routers' in group_names) != ('dumb_aps' in group_names)"
+        fail_msg: >-
+          Host '{{ inventory_hostname }}' must belong to exclusively one group:
+          'core_routers' OR 'dumb_aps'.
+
     - name: Override ansible_host with bootstrap_ip for initial provisioning
       set_fact:
         ansible_host: "{{ bootstrap_ip }}"
       when: bootstrap_ip is defined
 
-    - name: Ensure UCI fragments directory exists and clear stale fragments
+    - name: Enforce role-change reset gate and prepare UCI staging directory
       raw: |
         set -e
+        if [ -f /etc/ansible_device_role ]; then
+          CURRENT_ROLE=$(cat /etc/ansible_device_role)
+          if [ "$CURRENT_ROLE" != "{{ device_role }}" ]; then
+            echo "ROLE_MISMATCH: Device is currently provisioned as '$CURRENT_ROLE', but inventory defines '{{ device_role }}'." >&2
+            echo "Run 'firstboot -y && reboot' on the device, re-add your SSH key at 192.168.1.1, and re-run with '-e bootstrap_ip=192.168.1.1'." >&2
+            exit 1
+          fi
+        fi
         mkdir -p /etc/ansible_uci
         chmod 0700 /etc/ansible_uci
         rm -f /etc/ansible_uci/*.uci
@@ -38,43 +54,53 @@
     - include_role:
         name: wireless
 
-    # On first boot (or role switch), apply Stage 1 early ONLY if WAN is down
-    # so PPPoE can establish internet before package installation.
-    - name: Bootstrap base network early if WAN is not yet up
+    # Apply Stage 1 immediately ONLY during initial provisioning (bootstrap_ip)
+    # so the device moves from 192.168.1.1 to VLAN 10 and dials PPPoE WAN
+    # (for core_router only) before Stage 2 installs packages.
+    - name: Bootstrap base network during initial provisioning
       raw: |
         set -e
-        if ! ubus call network.interface.wan status 2>/dev/null | grep -q '"up": true'; then
-          for f in $(ls /etc/ansible_uci/10_*.uci 2>/dev/null | sort); do
-            uci -q batch < "$f"
-          done
-          for cfg in system network firewall dhcp wireless; do
-            uci commit "$cfg" 2>/dev/null || true
-          done
-          (
-            sleep 2
-            /etc/init.d/network restart
-            sleep 2
+        for sec in defaults zone forwarding rule redirect; do
+          while uci -q delete firewall.@${sec}[0]; do :; done
+        done
+        while uci -q delete network.@device[0]; do :; done
+        while uci -q delete dhcp.@host[0]; do :; done
+        while uci -q delete dhcp.@domain[0]; do :; done
+        while uci -q delete wireless.@wifi-iface[0]; do :; done
+
+        for f in $(ls /etc/ansible_uci/10_*.uci 2>/dev/null | sort); do
+          uci -q batch < "$f"
+        done
+        for cfg in system network firewall dhcp wireless; do
+          uci commit "$cfg" 2>/dev/null || true
+        done
+
+        (
+          sleep 2
+          /etc/init.d/network restart
+          sleep 2
+          if [ "{{ device_role }}" = "core_router" ]; then
             /etc/init.d/dnsmasq restart
             /etc/init.d/odhcpd restart
             /etc/init.d/firewall restart
-            /sbin/wifi reload
-          ) >/dev/null 2>&1 &
-          echo "BOOTSTRAPPED"
-        fi
+          fi
+          /sbin/wifi reload
+        ) >/dev/null 2>&1 &
+        echo "BOOTSTRAPPED"
       register: _bootstrap_net
       changed_when: "'BOOTSTRAPPED' in _bootstrap_net.stdout"
-      when: "'core_routers' in group_names"
+      when: bootstrap_ip is defined
 
-    - name: Point ansible_host to the target role IP
+    - name: Point ansible_host to the target VLAN 10 management IP
       set_fact:
         ansible_host: "{{ '192.168.10.1' if 'core_routers' in group_names else '192.168.10.' ~ ap_ip_suffix }}"
 
-    - name: Wait for router SSH after initial network bootstrap
+    - name: Wait for SSH on target VLAN 10 management IP after bootstrap
       delegate_to: localhost
       wait_for:
         host: "{{ ansible_host }}"
-        port: 22
-        delay: 10
+        port: "{{ ansible_port | default(22) }}"
+        delay: 8
         sleep: 2
         timeout: 60
       when: _bootstrap_net is defined and _bootstrap_net.changed
@@ -88,7 +114,7 @@
         - name: Wait for PPPoE WAN if add-on packages are not yet installed
           raw: |
             NEED_NET=0
-            for pkg in kmod-wireguard wireguard-tools ddns-scripts ddns-scripts-cloudflare smartdns wget-ssl; do
+            for pkg in kmod-wireguard wireguard-tools ddns-scripts ddns-scripts-cloudflare smartdns wget-ssl ca-bundle; do
               if command -v apk >/dev/null 2>&1; then
                 apk info -e "$pkg" >/dev/null 2>&1 || NEED_NET=1
               else
@@ -96,7 +122,6 @@
               fi
             done
             [ "$NEED_NET" -eq 0 ] && exit 0
-
             for i in $(seq 1 20); do
               if ubus call network.interface.wan status 2>/dev/null | grep -q '"up": true'; then
                 exit 0
@@ -109,8 +134,10 @@
 
         - include_role:
             name: wireguard
+
         - include_role:
             name: ddns
+
         - include_role:
             name: smartdns
 
@@ -120,10 +147,10 @@
           changed_when: false
 
         - debug:
-            msg: "WAN or package repo unavailable—continuing with base router config and 9.9.9.9 DNS fallback."
+            msg: "WAN or package repo unavailable; continuing with base router config and 9.9.9.9 DNS fallback."
 
     # --------------------------------------------------------------------------
-    # STAGE 3: Single Idempotent UCI Replay, Commit & Service Reload
+    # STAGE 3: Single Idempotent UCI Replay, Commit & Selective Service Reload
     # --------------------------------------------------------------------------
     - name: Apply and commit all staged UCI fragments in a single pass
       raw: |
@@ -133,21 +160,17 @@
           eval "PRE_${cfg}=\$(md5sum /etc/config/${cfg} 2>/dev/null | awk '{print \$1}')"
         done
 
-        # Reset dynamic/anonymous sections
+        # Reset dynamic/anonymous sections before deterministic replay
         for sec in defaults zone forwarding rule redirect; do
           while uci -q delete firewall.@${sec}[0]; do :; done
         done
+        while uci -q delete network.@device[0]; do :; done
         while uci -q delete dhcp.@host[0]; do :; done
         while uci -q delete dhcp.@domain[0]; do :; done
         while uci -q delete wireless.@wifi-iface[0]; do :; done
         while uci -q delete ddns.@service[0]; do :; done
 
-        if [ -s /etc/ansible_uci/10_20_dumb_ap.uci ]; then
-          uci -q delete network.wg0 || true
-          while uci -q delete network.@wireguard_wg0[0]; do :; done
-        fi
-
-        # Replay 10_*.uci followed by 20_*.uci before committing
+        # Replay Stage 1 (10_*.uci) followed by Stage 2 (20_*.uci)
         for f in $(ls /etc/ansible_uci/10_*.uci /etc/ansible_uci/20_*.uci 2>/dev/null | sort); do
           uci -q batch < "$f"
         done
@@ -188,5 +211,17 @@
             [ -x /etc/init.d/firewall ] && /etc/init.d/firewall enabled && /etc/init.d/firewall restart
             /sbin/wifi reload
           ) >/dev/null 2>&1 &
+          echo "NET_RELOADED"
         fi
+      register: _svc_restart
       when: _uci_apply.changed
+
+    - name: Wait for SSH after asynchronous network/wireless reload
+      delegate_to: localhost
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ ansible_port | default(22) }}"
+        delay: 5
+        sleep: 2
+        timeout: 45
+      when: _svc_restart is defined and _svc_restart.stdout is defined and 'NET_RELOADED' in _svc_restart.stdout

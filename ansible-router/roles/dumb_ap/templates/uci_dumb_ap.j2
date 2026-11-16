@@ -1,4 +1,4 @@
-# Remove any residual Core Router WAN / WG interfaces and peers
+# Remove factory default WAN interfaces
 delete network.wan
 delete network.wan6
 
@@ -25,16 +25,4 @@ delete network.{{ vlan.name }}
 set network.{{ vlan.name }}=interface
 set network.{{ vlan.name }}.device='br-lan.{{ vlan.id }}'
 set network.{{ vlan.name }}.proto='none'
-{% endfor %}
-
-# Remove SmartDNS upstream forwarder and re-enable standard resolv.conf if dnsmasq ever runs
-set dhcp.@dnsmasq[0].noresolv='0'
-del_list dhcp.@dnsmasq[0].server='127.0.0.1#5353'
-
-# Ignore DHCP on all interfaces in case dnsmasq is ever manually started
-{% for vlan in vlans %}
-delete dhcp.{{ vlan.name }}
-set dhcp.{{ vlan.name }}=dhcp
-set dhcp.{{ vlan.name }}.interface='{{ vlan.name }}'
-set dhcp.{{ vlan.name }}.ignore='1'
 {% endfor %}

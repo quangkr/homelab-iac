@@ -1,4 +1,17 @@
 ---
+- name: Stamp provisioned device role and preserve across sysupgrade
+  raw: |
+    set -e
+    if [ ! -f /etc/ansible_device_role ] || [ "$(cat /etc/ansible_device_role)" != "{{ device_role }}" ]; then
+      printf '%s\n' "{{ device_role }}" > /etc/ansible_device_role
+      chmod 0644 /etc/ansible_device_role
+      echo "STAMPED"
+    fi
+    touch /etc/sysupgrade.conf
+    grep -qxF '/etc/ansible_device_role' /etc/sysupgrade.conf || echo '/etc/ansible_device_role' >> /etc/sysupgrade.conf
+  register: _role_stamp
+  changed_when: "'STAMPED' in _role_stamp.stdout"
+
 - name: Disable conflicting pre-installed adblock services
   raw: |
     for svc in adblock adblock-fast simple-adblock; do
