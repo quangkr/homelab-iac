@@ -127,7 +127,7 @@ class MockPPPoEServer:
     def __init__(
         self,
         mcast_addr: str = "230.0.0.1",
-        mcast_port: int = 1001,
+        mcast_port: int = 10001,
         server_mac: bytes = b"\x02\x00\x00\x00\x00\x01",
         ac_name: str = "Mock-ISP-AC",
         expected_user: str = "lab_test_user",
@@ -497,7 +497,7 @@ class MockPPPoEServer:
 def main():
     parser = argparse.ArgumentParser(description="Rootless Mock PPPoE Access Concentrator")
     parser.add_argument("--mcast", type=str, default="230.0.0.1", help="Multicast IP address")
-    parser.add_argument("--port", type=int, default=1001, help="Multicast UDP port")
+    parser.add_argument("--port", type=int, default=10001, help="Multicast UDP port")
     parser.add_argument("--user", type=str, default="lab_test_user", help="Expected PPPoE username")
     parser.add_argument("--password", type=str, default="lab_test_pass", help="Expected PPPoE password")
     args = parser.parse_args()

@@ -1,4 +1,4 @@
-{% for radio_name, radio_cfg in radios.items() %}
+{% for radio_name, radio_cfg in (radios | default({})).items() %}
 set wireless.{{ radio_name }}.country='{{ country_code }}'
 set wireless.{{ radio_name }}.channel='{{ radio_cfg.channel }}'
 set wireless.{{ radio_name }}.htmode='{{ radio_cfg.htmode }}'
@@ -11,8 +11,8 @@ set wireless.{{ radio_name }}.disabled='1'
 {% endfor %}
 
 {% if wireless_enabled | default(true) %}
-{% for ssid_cfg in ssids %}
-{% for radio_name, radio_cfg in radios.items() %}
+{% for ssid_cfg in ssids | default([]) %}
+{% for radio_name, radio_cfg in (radios | default({})).items() %}
 {% if radio_cfg.band in ssid_cfg.band_ssids %}
 {% set sec = 'wifinet_' ~ (ssid_cfg.id | replace('-', '_') | replace(' ', '_')) ~ '_' ~ radio_cfg.band %}
 set wireless.{{ sec }}=wifi-iface
@@ -21,7 +21,9 @@ set wireless.{{ sec }}.mode='ap'
 set wireless.{{ sec }}.ssid='{{ ssid_cfg.band_ssids[radio_cfg.band] }}'
 set wireless.{{ sec }}.network='{{ ssid_cfg.network }}'
 set wireless.{{ sec }}.encryption='{{ ssid_cfg.encryption }}'
+{% if ssid_cfg.key is defined %}
 set wireless.{{ sec }}.key='{{ ssid_cfg.key }}'
+{% endif %}
 set wireless.{{ sec }}.hidden='{{ 1 if ssid_cfg.hidden else 0 }}'
 {% if ssid_cfg.encryption == 'sae-mixed' %}
 # Required for WPA2/WPA3 mixed mode: 1 = optional (allows both WPA2 and WPA3 clients)

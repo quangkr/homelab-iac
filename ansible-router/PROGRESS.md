@@ -28,19 +28,34 @@
 
 ---
 
-- **Virtual Machine Test Lab Setup (`test_lab/`):**
+- **Virtual Machine Test Lab Setup & Production Parity (`test_lab/`):**
   - Created rootless QEMU test lab supporting OpenWrt `23.05.5` and ImmortalWrt `25.12.2` across `armsr/armv8` (matching MT7981 `router-nr3053` & `router-32x6v1`) and `malta/le` (matching MT7621 `router-cr6606`).
   - Built `test_lab/fetch_image.sh` with offline Dropbear SSH key injection via `debugfs` directly on ext4 images without host root.
-  - Built `test_lab/lab.sh` orchestrator with userspace UDP multicast L2 networking (`230.0.0.1:1001` WAN, `:1002` LAN trunk) and sub-second ephemeral `qcow2` overlay snapshots.
+  - Built `test_lab/lab.sh` orchestrator with userspace UDP multicast L2 networking (`230.0.0.1:10001` WAN, `:10002` LAN trunk) and sub-second ephemeral `qcow2` overlay snapshots.
   - Built `test_lab/inventory_lab.yml` mapping virtio NICs and ports to `core_routers` (`lab-core`) and `dumb_aps` (`lab-ap`).
   - Built `test_lab/mock_isp.py` providing userspace mock DNS and Cloudflare DDNS REST API validation.
-  - Built `test_lab/run_matrix.py` implementing the automated Reset-Gated scenario matrix (CR-1..4, AP-1..2, RG-1, IDEM-1).
+  - Built `test_lab/run_matrix.py` implementing the automated Reset-Gated scenario matrix (CR-1..4, AP-1, RG-1, IDEM-1).
+  - **100% Production Parity:** Maintained clean production templates (`uci_core.j2`, `uci_dumb_ap.j2`) with zero test-specific logic or conditional branches.
+  - **Dual-Netdev QEMU Bootstrap Architecture:** Solved QEMU SLIRP off-link routing constraints cleanly in test harness by mapping two independent userspace management netdevs: `mgmt_factory` (`192.168.1.0/24`, ports `22221`/`22231`) and `mgmt_vlan10` (`192.168.10.0/24`, `host=192.168.10.253` for core / `.254` for ap, ports `22220`/`22230`). This prevents SLIRP virtual gateway collisions (`.2`) and permits real-world bootstrap from factory `192.168.1.1` to VLAN 10 without leaving secondary management IPs on routers.
+  - **SIGHUP Immunity & Process Group Detachment:** Added `trap '' HUP INT TERM` in parent shell and background subshells in `site.yml` Stage 1 and Stage 3, preventing Dropbear SSH session closure from aborting network/firewall reloads.
+  - **Strict Idempotency (`changed=0`):** Preserved staged `.uci` fragments in `pre_tasks` to allow `tasks/deploy_template.yml` `cmp -s` diffing, verified `changed=0` across both `core_router` and `dumb_ap` on subsequent runs.
+  - **Empirical Scenario Verification:** Verified `CR-1` (PASS), `CR-2` (PASS), `CR-3` (PASS), `AP-1` (PASS), `RG-1` (PASS), and `IDEM-1` (PASS) against live QEMU VMs.
 - **PPPoE Upstream Emulation & Password-Free Mock Fixtures:**
-  - Implemented `test_lab/mock_pppoe.py`: a rootless userspace PPPoE Access Concentrator operating over QEMU multicast (`230.0.0.1:1001`). Handles PPPoE Discovery (`PADI`/`PADO`/`PADR`/`PADS`/`PADT`), PPP LCP negotiation, PAP authentication (`lab_test_user`/`lab_test_pass`), IPCP dynamic IPv4 assignment (`100.64.0.2`), and IPv6CP negotiation with periodic ICMPv6 Router Advertisements for SLAAC WAN IPv6 configuration.
+  - Implemented `test_lab/mock_pppoe.py`: a rootless userspace PPPoE Access Concentrator operating over QEMU multicast (`230.0.0.1:10001`). Handles PPPoE Discovery (`PADI`/`PADO`/`PADR`/`PADS`/`PADT`), PPP LCP negotiation, PAP authentication (`lab_test_user`/`lab_test_pass`), IPCP dynamic IPv4 assignment (`100.64.0.2`), and IPv6CP negotiation with periodic ICMPv6 Router Advertisements for SLAAC WAN IPv6 configuration.
   - Integrated PPPoE server into `test_lab/mock_isp.py` with multi-service threading (`--pppoe-only`, `--dns-only`, `--cf-only`, `--no-pppoe`).
   - Created `test_lab/vault_mock.yml`: unencrypted, syntactically and cryptographically valid mock secrets fixture (valid Curve25519 WireGuard keys, mock PPPoE credentials, split-horizon domains, mock Cloudflare tokens).
   - Pluggable Vault in `site.yml`: enabled `vault_file | default(...)` in `site.yml` and configured `test_lab/inventory_lab.yml` and `test_lab/run_matrix.py` to seamlessly execute playbooks in test lab mode without entering vault passwords or exposing production secrets.
   - Documented PPPoE 8-byte framing overhead (MTU 1492 vs 1500), mandatory TCP MSS clamping (`mtu_fix '1'`), and `@wan` dynamic alias binding in `AGENTS.md` and `README.md`.
+
+- **Comprehensive Codebase & Test Lab Audit (Completed):**
+  - **Multicast Port Realignment:** Corrected documentation in `AGENTS.md` and `README.md` to reference rootless unprivileged UDP multicast ports `10001` (WAN) and `10002` (LAN trunk) matching `lab.sh`, `mock_isp.py`, and `mock_pppoe.py`.
+  - **CLI Usability & Help:** Updated `test_lab/fetch_image.sh` to support positional flavor arguments (e.g. `./test_lab/fetch_image.sh openwrt`) alongside `--flavor`, corrected `x86_64` to `armsr/armv8` in `README.md`, added `wait` command to `lab.sh` usage help, and updated VM startup logging to report active dual-netdev ports.
+  - **Multi-VM SLIRP Collision Resolution:** Discovered and resolved an ARP/FDB collision that occurred when `lab-core` and `lab-ap` VMs ran concurrently over the L2 multicast trunk. Isolated their virtual SLIRP gateways to non-conflicting IP addresses (`192.168.10.253` for core, `192.168.10.254` for ap), eliminating bridge MAC flaps and banner exchange timeouts.
+  - **SSH Identity Key Parameterization:** Updated `tasks/deploy_template.yml` to pass `ansible_ssh_private_key_file` (`-i <key>`) when specified, ensuring non-default SSH keys authenticate properly during stdin template streaming.
+  - **Jinja2 Template Robustness & Defensive Guards:** Added `| default([])` guards to loops in `uci_wireless.j2`, `uci_ddns.j2`, and `uci_wireguard.j2` so playbook execution succeeds even if optional lists are omitted from `vault.yml`. Guarded `key` in `uci_wireless.j2` to cleanly support open Wi-Fi networks without passwords.
+  - **Device Configuration Cleanup:** Removed redundant `delete network.@device[0]` from `uci_common.j2` to prevent unintended deletion of non-bridge devices, relying exclusively on `site.yml`'s pre-replay anonymous purge.
+  - **Task Idempotency & Hygiene:** Refactored SmartDNS crontab task in `roles/smartdns/tasks/main.yml` to restart `cron` only when a crontab entry was newly added or cron was stopped. Added `2>/dev/null` to `opkg status` across `wireguard`, `ddns`, and `smartdns` to suppress benign non-installed stderr output.
+  - **Empirical Regression Verification:** Verified live scenario runs: `CR-1` (PASS, 135.75s), `RG-1` (PASS, 2.52s), `AP-1` (PASS, 84.94s), and `IDEM-1` (PASS, 63.54s with strict `changed=0`).
 
 ---
 

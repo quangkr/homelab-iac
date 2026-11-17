@@ -17,9 +17,16 @@
           Host '{{ inventory_hostname }}' must belong to exclusively one group:
           'core_routers' OR 'dumb_aps'.
 
-    - name: Override ansible_host with bootstrap_ip for initial provisioning
+    - name: Record target management endpoint for bootstrap restoration
+      set_fact:
+        _bootstrap_target_host: "{{ ansible_host }}"
+        _bootstrap_target_port: "{{ ansible_port | default(22) }}"
+      when: bootstrap_ip is defined
+
+    - name: Override ansible_host and ansible_port with bootstrap endpoint for initial provisioning
       set_fact:
         ansible_host: "{{ bootstrap_ip }}"
+        ansible_port: "{{ bootstrap_port | default(ansible_port | default(22)) }}"
       when: bootstrap_ip is defined
 
     - name: Enforce role-change reset gate and prepare UCI staging directory
@@ -35,7 +42,6 @@
         fi
         mkdir -p /etc/ansible_uci
         chmod 0700 /etc/ansible_uci
-        rm -f /etc/ansible_uci/*.uci
       changed_when: false
 
   tasks:
@@ -62,6 +68,7 @@
     - name: Bootstrap base network during initial provisioning
       raw: |
         set -e
+        trap '' HUP INT TERM
         for sec in defaults zone forwarding rule redirect; do
           while uci -q delete firewall.@${sec}[0]; do :; done
         done
@@ -79,6 +86,7 @@
         done
 
         (
+          trap '' HUP INT TERM
           sleep 2
           /etc/init.d/network restart
           sleep 2
@@ -87,25 +95,28 @@
             /etc/init.d/odhcpd restart
             /etc/init.d/firewall restart
           fi
-          /sbin/wifi reload
-        ) >/dev/null 2>&1 &
+          /sbin/wifi reload 2>/dev/null || true
+        ) </dev/null >/dev/null 2>&1 &
         echo "BOOTSTRAPPED"
       register: _bootstrap_net
       changed_when: "'BOOTSTRAPPED' in _bootstrap_net.stdout"
       when: bootstrap_ip is defined
 
-    - name: Point ansible_host to the target VLAN 10 management IP
+    - name: Restore ansible_host and ansible_port to the target management endpoint
       set_fact:
-        ansible_host: "{{ '192.168.10.1' if 'core_routers' in group_names else '192.168.10.' ~ ap_ip_suffix }}"
+        ansible_host: "{{ _bootstrap_target_host }}"
+        ansible_port: "{{ _bootstrap_target_port }}"
+      when: bootstrap_ip is defined
 
-    - name: Wait for SSH on target VLAN 10 management IP after bootstrap
+    - name: Wait for SSH on target management endpoint after bootstrap
       delegate_to: localhost
       wait_for:
         host: "{{ ansible_host }}"
-        port: "{{ ansible_port | default(22) }}"
-        delay: 8
+        port: "{{ ansible_port }}"
+        delay: 15
         sleep: 2
-        timeout: 60
+        timeout: 90
+        search_regex: "SSH"
       when: _bootstrap_net is defined and _bootstrap_net.changed
 
     # --------------------------------------------------------------------------
@@ -195,6 +206,7 @@
     - name: Restart changed services
       raw: |
         set -e
+        trap '' HUP INT TERM
         CHANGED="{{ _uci_apply.stdout | regex_search('^CHANGED_CONFIGS:\\s+\\S+', multiline=True) | replace('CHANGED_CONFIGS:', '') }}"
         NEED_NET_RELOAD=0
         for cfg in $CHANGED; do
@@ -209,12 +221,13 @@
         done
         if [ "$NEED_NET_RELOAD" -eq 1 ]; then
           (
+            trap '' HUP INT TERM
             sleep 2
             /etc/init.d/network restart
             sleep 2
             [ -x /etc/init.d/firewall ] && /etc/init.d/firewall enabled && /etc/init.d/firewall restart
-            /sbin/wifi reload
-          ) >/dev/null 2>&1 &
+            /sbin/wifi reload 2>/dev/null || true
+          ) </dev/null >/dev/null 2>&1 &
           echo "NET_RELOADED"
         fi
       register: _svc_restart

@@ -7,6 +7,7 @@
 # offline using debugfs (no host root / loop mounts required).
 # ==============================================================================
 set -euo pipefail
+export PATH="/sbin:/usr/sbin:${PATH}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_DIR="${SCRIPT_DIR}/cache"
@@ -39,6 +40,7 @@ EOF
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    openwrt|immortalwrt) FLAVOR="$1"; shift ;;
     --flavor)  FLAVOR="$2"; shift 2 ;;
     --version) VERSION="$2"; shift 2 ;;
     --arch)    ARCH="$2"; shift 2 ;;
@@ -85,7 +87,7 @@ fi
 if [ "${FLAVOR}" = "openwrt" ]; then
   BASE_URL="https://downloads.openwrt.org/releases/${VERSION}/targets/${ARCH}"
   if [ "${ARCH}" = "armsr/armv8" ]; then
-    IMG_NAME="openwrt-${VERSION}-armsr-armv8-generic-ext4-combined.img.gz"
+    IMG_NAME="openwrt-${VERSION}-armsr-armv8-generic-ext4-rootfs.img.gz"
     KERNEL_NAME="openwrt-${VERSION}-armsr-armv8-generic-kernel.bin"
   elif [ "${ARCH}" = "malta/le" ]; then
     IMG_NAME="openwrt-${VERSION}-malta-le-rootfs-ext4.img.gz"
@@ -97,7 +99,7 @@ if [ "${FLAVOR}" = "openwrt" ]; then
 elif [ "${FLAVOR}" = "immortalwrt" ]; then
   BASE_URL="https://downloads.immortalwrt.org/releases/${VERSION}/targets/${ARCH}"
   if [ "${ARCH}" = "armsr/armv8" ]; then
-    IMG_NAME="immortalwrt-${VERSION}-armsr-armv8-generic-ext4-combined.img.gz"
+    IMG_NAME="immortalwrt-${VERSION}-armsr-armv8-generic-ext4-rootfs.img.gz"
     KERNEL_NAME="immortalwrt-${VERSION}-armsr-armv8-generic-kernel.bin"
   elif [ "${ARCH}" = "malta/le" ]; then
     IMG_NAME="immortalwrt-${VERSION}-malta-le-rootfs-ext4.img.gz"
@@ -140,9 +142,23 @@ RAW_IMG="${CACHE_DIR}/${OUT_PREFIX}.raw"
 echo "[2/4] Decompressing image to ${RAW_IMG}..."
 gzip -dc "${CACHE_IMG_GZ}" > "${RAW_IMG}"
 
-if command -v qemu-img >/dev/null 2>&1; then
-  echo "Expanding image to 256MB with qemu-img..."
-  qemu-img resize -f raw "${RAW_IMG}" 256M
+# Expand image if smaller than 512MB
+TARGET_BYTES=$((512 * 1024 * 1024))
+CURRENT_BYTES=$(stat -c %s "${RAW_IMG}" 2>/dev/null || stat -f %z "${RAW_IMG}" 2>/dev/null || echo 0)
+
+if [ "${CURRENT_BYTES}" -lt "${TARGET_BYTES}" ]; then
+  if command -v qemu-img >/dev/null 2>&1; then
+    echo "Expanding image to 512MB with qemu-img..."
+    qemu-img resize -f raw "${RAW_IMG}" 512M
+  elif command -v truncate >/dev/null 2>&1; then
+    echo "Expanding image to 512MB with truncate..."
+    truncate -s 512M "${RAW_IMG}"
+  fi
+
+  if command -v resize2fs >/dev/null 2>&1; then
+    e2fsck -fy "${RAW_IMG}" >/dev/null 2>&1 || true
+    resize2fs "${RAW_IMG}" >/dev/null 2>&1 || true
+  fi
 fi
 
 # Step 3: Offline SSH public key injection via debugfs

@@ -73,7 +73,7 @@ git_root/
    - PPPoE introduces an 8-byte encapsulation overhead, constraining the WAN MTU to 1492 (compared to standard 1500 Ethernet).
    - TCP MSS clamping (`mtu_fix '1'`) is mandatory on the `wan` firewall zone to clamp MSS to 1452 bytes, preventing silent packet drops and path MTU blackholes.
    - The `wan6` interface binds to `@wan` (`device '@wan'`), meaning the IPv6 SLAAC/DHCPv6 protocol stack dynamically anchors to the virtual `pppoe-wan` link established by the PPPoE daemon (`pppd`).
-   - The test lab simulates this topology via a rootless userspace PPPoE Access Concentrator (`test_lab/mock_pppoe.py`) listening on QEMU's multicast WAN bus (`230.0.0.1:1001`).
+   - The test lab simulates this topology via a rootless userspace PPPoE Access Concentrator (`test_lab/mock_pppoe.py`) listening on QEMU's multicast WAN bus (`230.0.0.1:10001`).
 
 ## 3. Fleet Hardware & Driver Quirks
 

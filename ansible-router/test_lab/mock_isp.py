@@ -141,7 +141,7 @@ def main():
     parser.add_argument("--cf-port", type=int, default=8088, help="Cloudflare mock API HTTP port")
     parser.add_argument("--dns-port", type=int, default=5354, help="Mock DNS UDP port")
     parser.add_argument("--pppoe-mcast", type=str, default="230.0.0.1", help="PPPoE multicast IP")
-    parser.add_argument("--pppoe-port", type=int, default=1001, help="PPPoE multicast port")
+    parser.add_argument("--pppoe-port", type=int, default=10001, help="PPPoE multicast port")
     parser.add_argument("--dns-only", action="store_true", help="Run DNS mock only")
     parser.add_argument("--cf-only", action="store_true", help="Run Cloudflare API mock only")
     parser.add_argument("--pppoe-only", action="store_true", help="Run PPPoE mock only")

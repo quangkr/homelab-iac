@@ -123,9 +123,25 @@ def execute_scenario(sc, dry_run=False, vault_pass_file=None):
         time.sleep(0.1)
         return True, "Dry-run succeeded"
 
-    # Check that lab.sh and QEMU exist
+    # Check that lab.sh exists
     if not os.path.exists(LAB_SH):
         return False, f"Harness script missing: {LAB_SH}"
+
+    if sc["target"] == "all":
+        roles = ["core", "ap"]
+    elif "core" in sc["target"]:
+        roles = ["core"]
+    else:
+        roles = ["ap"]
+
+    for r in roles:
+        if sc.get("bootstrap"):
+            print(f"Resetting {r} VM to pristine factory state...")
+            run_command(f"{LAB_SH} reset-{r}", check=True, capture=False)
+            run_command(f"{LAB_SH} wait {r}", check=True, capture=False)
+        else:
+            run_command(f"{LAB_SH} up {r}", check=True, capture=False)
+            run_command(f"{LAB_SH} wait {r}", check=True, capture=False)
 
     # Build ansible-playbook command
     ansible_cmd = [
@@ -136,7 +152,7 @@ def execute_scenario(sc, dry_run=False, vault_pass_file=None):
     ]
 
     if sc.get("bootstrap"):
-        ansible_cmd.extend(["-e", "bootstrap_ip=192.168.1.1"])
+        ansible_cmd.extend(["-e", "bootstrap_ip=127.0.0.1"])
 
     if sc.get("extra_vars"):
         ansible_cmd.extend(["-e", sc["extra_vars"]])
@@ -165,7 +181,8 @@ def execute_scenario(sc, dry_run=False, vault_pass_file=None):
             return False, f"Expected failure with '{expected_err}', but got exit code {code}"
 
     if code != 0:
-        return False, f"Playbook failed with code {code}: {stderr[:300]}"
+        err_msg = stderr.strip() if stderr.strip() else stdout.strip()[-500:]
+        return False, f"Playbook failed with code {code}: {err_msg}"
 
     if "expect_changed" in sc:
         if "changed=0" in stdout:

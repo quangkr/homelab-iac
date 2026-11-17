@@ -4,6 +4,7 @@
   command:
     argv: "{{ ['ssh', '-o', 'ControlMaster=no', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null']
               + (ansible_ssh_common_args.split() if ansible_ssh_common_args is defined and ansible_ssh_common_args else [])
+              + (['-i', ansible_ssh_private_key_file] if ansible_ssh_private_key_file is defined and ansible_ssh_private_key_file else [])
               + ['-p', (ansible_port | default(22)) | string, ansible_user ~ '@' ~ ansible_host, 'cat > ' ~ dest_path ~ '.tmp'] }}"
     stdin: "{{ lookup('template', template_src) }}"
     stdin_add_newline: false

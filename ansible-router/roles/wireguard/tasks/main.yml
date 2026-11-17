@@ -13,7 +13,7 @@
       fi
     else
       for pkg in $PKGS; do
-        opkg status "$pkg" | grep -q "Status: install" || MISSING="$MISSING $pkg"
+        opkg status "$pkg" 2>/dev/null | grep -q "Status: install" || MISSING="$MISSING $pkg"
       done
       if [ -n "$MISSING" ]; then
         opkg update && opkg install $MISSING
@@ -36,7 +36,7 @@
     src: wg_client.conf.j2
     dest: "{{ playbook_dir }}/wireguard_clients/{{ item.name }}.conf"
     mode: '0600'
-  loop: "{{ wireguard_peers }}"
+  loop: "{{ wireguard_peers | default([]) }}"
   no_log: true
 
 - name: Deploy WireGuard UCI Script

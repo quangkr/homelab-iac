@@ -14,7 +14,6 @@ set network.globals=globals
 set network.globals.ula_prefix='{{ ula_base }}::/48'
 
 # --- Main DSA VLAN-Filtering Bridge (br-lan) ---
-delete network.@device[0]
 delete network.br_lan
 set network.br_lan=device
 set network.br_lan.name='br-lan'

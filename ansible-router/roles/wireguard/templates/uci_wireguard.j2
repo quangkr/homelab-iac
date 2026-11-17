@@ -10,7 +10,7 @@ set network.wg0.listen_port='{{ wireguard_port }}'
 add_list network.wg0.addresses='{{ wireguard_subnet }}.1/24'
 add_list network.wg0.addresses='{{ wireguard_subnet6 }}::1/64'
 
-{% for peer in wireguard_peers %}
+{% for peer in wireguard_peers | default([]) %}
 set network.wg_peer_{{ peer.name | replace('-', '_') }}=wireguard_wg0
 set network.wg_peer_{{ peer.name | replace('-', '_') }}.description='{{ peer.name }}'
 set network.wg_peer_{{ peer.name | replace('-', '_') }}.public_key='{{ peer.pubkey }}'

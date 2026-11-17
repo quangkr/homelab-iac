@@ -199,7 +199,7 @@ logread -e ddns
 The repository includes a rootless QEMU-based test environment in `test_lab/` to validate playbook execution, the Reset-Gate, and offline-to-online transitions without physical hardware.
 
 ### Architecture & Features
-- **Rootless L2 Multicast Mesh:** Uses QEMU UDP multicast (`230.0.0.1:1001` for WAN, `:1002` for LAN trunk) without requiring `sudo`, TAP devices, or kernel bridges.
+- **Rootless L2 Multicast Mesh:** Uses QEMU UDP multicast (`230.0.0.1:10001` for WAN, `:10002` for LAN trunk) without requiring `sudo`, TAP devices, or kernel bridges.
 - **Mock PPPoE Access Concentrator:** `test_lab/mock_pppoe.py` runs an unprivileged userspace PPPoE AC over multicast, performing PPPoE discovery, PAP authentication (`lab_test_user`/`lab_test_pass`), IPCP dynamic address assignment (`100.64.0.2`), and periodic ICMPv6 Router Advertisements for `wan6` SLAAC (MTU 1492, MSS clamping 1452).
 - **Unencrypted Fixture (`vault_mock.yml`):** Supplies syntactically valid Curve25519 keys, mock PPPoE credentials, split-horizon domains, and mock Cloudflare tokens for password-free lab runs (`-e vault_file=test_lab/vault_mock.yml`).
 - **Mock Cloudflare API & DNS:** `test_lab/mock_isp.py` verifies DDNS update requests and DNS blocklisting.
@@ -207,8 +207,9 @@ The repository includes a rootless QEMU-based test environment in `test_lab/` to
 ### Running the Test Suite
 
 ```bash
-# 1. Fetch OpenWrt or ImmortalWrt x86_64 lab images (downloads once, injects SSH key)
+# 1. Fetch OpenWrt or ImmortalWrt armsr/armv8 lab images (downloads once, injects SSH key)
 ./test_lab/fetch_image.sh openwrt
+# or specify flags: ./test_lab/fetch_image.sh --flavor immortalwrt --version 25.12.2 --arch armsr/armv8
 
 # 2. Run the scenario test matrix in dry-run mode
 python3 test_lab/run_matrix.py --dry-run

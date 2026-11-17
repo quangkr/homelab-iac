@@ -13,7 +13,7 @@
       fi
     else
       for pkg in $PKGS; do
-        opkg status "$pkg" | grep -q "Status: install" || MISSING="$MISSING $pkg"
+        opkg status "$pkg" 2>/dev/null | grep -q "Status: install" || MISSING="$MISSING $pkg"
       done
       if [ -n "$MISSING" ]; then
         opkg update && opkg install $MISSING

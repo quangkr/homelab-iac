@@ -12,13 +12,54 @@ all:
       hosts:
         lab-core:
           ansible_host: 127.0.0.1
-          ansible_port: 2222
+          ansible_port: 22220
+          bootstrap_port: 22221
           hardware_model: "QEMU Virt"
           wireless_enabled: false
           ap_ip_suffix: 9
-          wan_port: "eth0"
+          wan_port: "eth1"
           wan_vlan_tag: none
           lan_ports:
+            - "eth0"
+            - "eth2"
+            - "eth3"
+          all_ports:
+            - "eth0"
+            - "eth1"
+            - "eth2"
+            - "eth3"
+          port_vlans:
+            eth0:
+              pvid: 1
+              tagged: []
+            eth2:
+              pvid: 10
+              tagged: "all"
+            eth3:
+              pvid: 10
+              tagged: []
+          radios:
+            radio0:
+              band: "2g"
+              channel: "6"
+              htmode: "HE40"
+            radio1:
+              band: "5g"
+              channel: "149"
+              htmode: "HE80"
+    dumb_aps:
+      hosts:
+        lab-ap:
+          ansible_host: 127.0.0.1
+          ansible_port: 22230
+          bootstrap_port: 22231
+          hardware_model: "QEMU Virt"
+          ap_ip_suffix: 2
+          wireless_enabled: false
+          wan_port: "none"
+          wan_vlan_tag: none
+          lan_ports:
+            - "eth0"
             - "eth1"
             - "eth2"
           all_ports:
@@ -26,25 +67,21 @@ all:
             - "eth1"
             - "eth2"
           port_vlans:
+            eth0:
+              pvid: 1
+              tagged: []
             eth1:
               pvid: 10
               tagged: "all"
             eth2:
-              pvid: 20
+              pvid: 10
               tagged: []
-    dumb_aps:
-      hosts:
-        lab-ap:
-          ansible_host: 127.0.0.1
-          ansible_port: 2223
-          hardware_model: "QEMU Virt"
-          ap_ip_suffix: 2
-          wireless_enabled: false
-          wan_port: "eth0"
-          wan_vlan_tag: none
-          lan_ports:
-            - "eth0"
-            - "eth1"
-          all_ports:
-            - "eth0"
-            - "eth1"
+          radios:
+            radio0:
+              band: "2g"
+              channel: "6"
+              htmode: "HE40"
+            radio1:
+              band: "5g"
+              channel: "149"
+              htmode: "HE80"

@@ -1,7 +1,7 @@
 # ==========================================
 # Cloudflare Dynamic DNS Configuration
 # ==========================================
-{% for dom in ddns_domains %}
+{% for dom in ddns_domains | default([]) %}
 {% set safe_zone = dom.zone | replace('.', '_') %}
 {% for sub in dom.subdomains %}
 {% set sub_name = sub.name %}
