@@ -24,10 +24,11 @@ git_root/
 │   └── tasks/deploy_template.yml          # Python-free SSH stdin template uploader
 └── homelab-iac-private/                   # External private repository
     └── ansible-router/
-        └── group_vars/all/vault.yml       # Single Ansible-Vault encrypted secrets file
+        ├── group_vars/all/vault.yml       # Single Ansible-Vault encrypted secrets file
+        └── wireguard_clients/             # Rendered client WireGuard .conf profiles
 ```
 
-- **Secrets Rule:** Never create or reference `local_secrets.yml`. All secrets (PPPoE, WireGuard keys, Wi-Fi keys, Cloudflare API tokens, static leases/domains, port forwards) reside in `../homelab-iac-private/ansible-router/group_vars/all/vault.yml` and are loaded via `vars_files` in `site.yml`.
+- **Secrets Rule:** Never create or reference `local_secrets.yml` or store client `.conf` profiles in this repository. All secrets (PPPoE, WireGuard keys, Wi-Fi keys, Cloudflare API tokens, static leases/domains, port forwards) reside in `../homelab-iac-private/ansible-router/group_vars/all/vault.yml` and client WireGuard configs are rendered directly to `../homelab-iac-private/ansible-router/wireguard_clients/`.
 
 ## 2. Hard Architectural Invariants (Do Not Violate)
 

@@ -10,7 +10,7 @@
 - **DNS, Ad-Blocking, VPN & DDNS Roles:**
   - `smartdns`: Quad9 DoH/DoT upstreams + OISD Small & HaGeZi Pro Mini `domain-set` ad-blocking on `127.0.0.1:5353`, weekly cron updater, and `9.9.9.9` fallback when offline.
   - `core_router` (`dnsmasq`): Split-horizon DNS with `ip6: "::"` `NODATA` AAAA/HTTPS leak suppression and sanitized static DHCP lease hostnames.
-  - `wireguard`: Server + peer UCI config on `wg0` (`192.168.9.0/24`) attached to `lan` zone, plus local client `.conf` rendering in `wireguard_clients/`.
+  - `wireguard`: Server + peer UCI config on `wg0` (`192.168.9.0/24`) attached to `lan` zone, plus client `.conf` rendering in `../homelab-iac-private/ansible-router/wireguard_clients/`.
   - `ddns`: Multi-zone Cloudflare IPv4 (`wan`) and IPv6 (`wan6`) DDNS with custom `lookup_host` support.
 - **Reset-Gate Role Enforcement & Simplified Secrets:**
   - Added `/etc/ansible_device_role` stamp (persisted in `/etc/sysupgrade.conf`, cleared on `firstboot`) and `pre_tasks` `ROLE_MISMATCH` guard to prevent dirty in-place `core_router` ↔ `dumb_ap` switches.
@@ -56,6 +56,7 @@
   - **Device Configuration Cleanup:** Removed redundant `delete network.@device[0]` from `uci_common.j2` to prevent unintended deletion of non-bridge devices, relying exclusively on `site.yml`'s pre-replay anonymous purge.
   - **Task Idempotency & Hygiene:** Refactored SmartDNS crontab task in `roles/smartdns/tasks/main.yml` to restart `cron` only when a crontab entry was newly added or cron was stopped. Added `2>/dev/null` to `opkg status` across `wireguard`, `ddns`, and `smartdns` to suppress benign non-installed stderr output.
   - **Empirical Regression Verification:** Verified live scenario runs: `CR-1` (PASS, 135.75s), `RG-1` (PASS, 2.52s), `AP-1` (PASS, 84.94s), and `IDEM-1` (PASS, 63.54s with strict `changed=0`).
+  - **Externalized WireGuard Client Profiles:** Migrated `wireguard_clients/` out of this repository into `../homelab-iac-private/ansible-router/wireguard_clients/` via configurable `wireguard_clients_dir` variable, keeping all private client keys in the private repository while isolating lab runs via `wireguard_clients_output_dir` in `inventory_lab.yml`.
 
 ---
 

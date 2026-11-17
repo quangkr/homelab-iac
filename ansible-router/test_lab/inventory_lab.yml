@@ -7,6 +7,7 @@ all:
     ansible_user: root
     ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     vault_file: "{{ playbook_dir }}/test_lab/vault_mock.yml"
+    wireguard_clients_output_dir: "{{ playbook_dir }}/test_lab/run/wireguard_clients"
   children:
     core_routers:
       hosts:

@@ -155,13 +155,13 @@ ansible-playbook site.yml --limit router-nr3053 --ask-vault-pass
 
 ## WireGuard Client Profiles
 
-Running `site.yml` against `core_routers` automatically renders ready-to-import client `.conf` files into `./wireguard_clients/` (git-ignored).
+Running `site.yml` against `core_routers` automatically renders ready-to-import client `.conf` files directly into the private repository at `../homelab-iac-private/ansible-router/wireguard_clients/` (keeping all private client keys outside this repository):
 
-- **Desktop import:** Import `wireguard_clients/<peer>.conf` directly into the WireGuard app.
+- **Desktop import:** Import `../homelab-iac-private/ansible-router/wireguard_clients/<peer>.conf` directly into the WireGuard app.
 - **Mobile QR code:**
 
   ```bash
-  qrencode -t ansiutf8 < wireguard_clients/phone.conf
+  qrencode -t ansiutf8 < ../homelab-iac-private/ansible-router/wireguard_clients/phone.conf
   ```
 
 ---

@@ -1,0 +1,2 @@
+---
+wireguard_clients_dir: "{{ wireguard_clients_output_dir | default(playbook_dir ~ '/../homelab-iac-private/ansible-router/wireguard_clients') }}"
