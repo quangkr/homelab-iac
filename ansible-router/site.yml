@@ -66,6 +66,7 @@
           while uci -q delete firewall.@${sec}[0]; do :; done
         done
         while uci -q delete network.@device[0]; do :; done
+        while uci -q delete network.@bridge-vlan[0]; do :; done
         while uci -q delete dhcp.@host[0]; do :; done
         while uci -q delete dhcp.@domain[0]; do :; done
         while uci -q delete wireless.@wifi-iface[0]; do :; done
@@ -116,7 +117,7 @@
         - name: Wait for PPPoE WAN if add-on packages are not yet installed
           raw: |
             NEED_NET=0
-            for pkg in kmod-wireguard wireguard-tools ddns-scripts ddns-scripts-cloudflare smartdns wget-ssl ca-bundle; do
+            for pkg in kmod-wireguard wireguard-tools ddns-scripts ddns-scripts-cloudflare curl smartdns wget-ssl ca-bundle; do
               if command -v apk >/dev/null 2>&1; then
                 apk info -e "$pkg" >/dev/null 2>&1 || NEED_NET=1
               else
@@ -167,6 +168,7 @@
           while uci -q delete firewall.@${sec}[0]; do :; done
         done
         while uci -q delete network.@device[0]; do :; done
+        while uci -q delete network.@bridge-vlan[0]; do :; done
         while uci -q delete dhcp.@host[0]; do :; done
         while uci -q delete dhcp.@domain[0]; do :; done
         while uci -q delete wireless.@wifi-iface[0]; do :; done
@@ -198,10 +200,10 @@
         for cfg in $CHANGED; do
           case "$cfg" in
             system)   /etc/init.d/system reload ;;
-            dhcp)     /etc/init.d/dnsmasq restart; /etc/init.d/odhcpd restart ;;
+            dhcp)     [ "{{ device_role }}" = "core_router" ] && { /etc/init.d/dnsmasq restart; /etc/init.d/odhcpd restart; } ;;
             smartdns) /etc/init.d/smartdns enable; /etc/init.d/smartdns restart ;;
             ddns)     /etc/init.d/ddns enable; /etc/init.d/ddns restart ;;
-            firewall) /etc/init.d/firewall restart ;;
+            firewall) [ "{{ device_role }}" = "core_router" ] && /etc/init.d/firewall restart ;;
             network|wireless) NEED_NET_RELOAD=1 ;;
           esac
         done

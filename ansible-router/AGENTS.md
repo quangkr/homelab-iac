@@ -54,15 +54,20 @@ git_root/
 4. **Dual Package Manager Support (`apk` + `opkg`):**
    - Always check `command -v apk >/dev/null 2>&1` before falling back to `opkg` so playbooks work across both OpenWrt 23.05 (`opkg`) and 24.10+ / snapshots (`apk`).
 5. **Network & Firewall Segmentation:**
-   - VLAN 10 (`lan`, `192.168.10.0/24`): Management + full access (includes `wg0`, `192.168.9.0/24`).
-   - VLAN 20 (`lab`, `192.168.20.0/24`): WAN + `iot` only.
-   - VLAN 30 (`guest`, `192.168.30.0/24`): WAN + `lab` only.
-   - VLAN 40 (`iot`, `192.168.40.0/24`): Isolated, **no WAN**.
-   - VLAN 41 (`iot_pub`, `192.168.41.0/24`): WAN only, isolated from all other VLANs.
+   - VLAN 10 (`lan`, `192.168.10.0/24`): Management + full access (includes `wg0`, `192.168.9.0/24`). Only VLAN that receives both GUA and ULA IPv6 prefixes (the upstream ISP delegates a single `/64` prefix, so only one local VLAN can receive public GUA).
+   - VLAN 20 (`lab`, `192.168.20.0/24`): WAN + `iot` only. Restricted to ULA only (`ip6class: 'local'`) with `ra_default '0'`.
+   - VLAN 30 (`guest`, `192.168.30.0/24`): WAN + `lab` only. Restricted to ULA only (`ip6class: 'local'`) with `ra_default '0'`.
+   - VLAN 40 (`iot`, `192.168.40.0/24`): Isolated, **no WAN**. Restricted to ULA only (`ip6class: 'local'`) with `ra_default '0'`.
+   - VLAN 41 (`iot_pub`, `192.168.41.0/24`): WAN only, isolated from all other VLANs. Restricted to ULA only (`ip6class: 'local'`) with `ra_default '0'`.
    - Never add blanket `wan -> lab` zone forwarding. IPv4 uses `redirect` (`DNAT`); IPv6 uses port-specific `rule` entries with negative-netmask suffixes (e.g., `::10/-64`).
 6. **Split-Horizon DNS & Leak Prevention:**
    - `dnsmasq` owns port `53` (`noresolv='1'`, `localuse='1'`). Static hostnames in `dhcp_static_domains` with `ip6: "::"` add `server=/<fqdn>/` so `dnsmasq` answers `NODATA` for `AAAA` and `HTTPS` (type 65) queries instead of leaking public Cloudflare AAAA records.
    - `smartdns` runs on `127.0.0.1:5353` (`auto_set_dnsmasq='0'`) with Quad9 DoH/DoT and `domain-set` blocklists.
+7. **Upstream ISP IPv6 Characteristics & DDNS:**
+   - The upstream ISP provides a WAN IPv6 address via Router Advertisements (RA/SLAAC) on `wan6` and delegates a single `/64` prefix via DHCPv6-PD. Because only a single `/64` prefix is delegated, only one VLAN (VLAN 10) can receive a public GUA prefix; all other VLANs use private ULA prefixes (`ip6class: 'local'`).
+   - The WAN RA address is reliable, but the DHCPv6-PD prefix can sometimes be intermittent or absent during dial-up renegotiation.
+   - For DDNS, `ddns_ipv6_interface` tracks `wan6` (`ip_source='network'`), reading the stable WAN RA IP address via `ubus call network.interface.wan6 status` rather than relying on delegated LAN prefixes.
+   - For local subnets, ULA (`network.globals.ula_prefix`) guarantees unbroken local IPv6 routing and split-DNS resolution even when ISP prefix delegation is temporarily absent.
 
 ## 3. Fleet Hardware & Driver Quirks
 
@@ -71,7 +76,9 @@ git_root/
 - **`router-cr6606` (Xiaomi CR6606 — MediaTek MT7621, `mipsel_24kc`):** Standard `mac80211` (`radio0`, `radio1`) and `eth0..eth2`.
 - Always sanitize dynamic string identifiers (e.g., DHCP lease hostnames) with `regex_replace` before writing `uci batch` lines.
 
-## 4. Collaborator Workflow
+## 4. Workflow Rules
 
-- Keep `PROGRESS.md` updated whenever completing milestones, modifying playbooks/roles, or adding test-lab scripts.
 - Use `no_log: true` on any task handling credentials, private keys, or API tokens.
+- At the start of every session, read @PROGRESS.md to understand current task status and blockers.
+- Before finishing any coding task, update @PROGRESS.md with completed items and next steps.
+

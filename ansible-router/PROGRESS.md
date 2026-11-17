@@ -17,6 +17,14 @@
   - Removed bidirectional teardown workarounds from `site.yml` and `roles/dumb_ap`.
   - Created `bootstrap_ssh.sh` and updated `README.md`.
   - Consolidated `vault.yml` and `local_secrets.yml` into a single encrypted file at `../homelab-iac-private/ansible-router/group_vars/all/vault.yml` loaded via `vars_files`.
+- **Fleet Hardening, Guardrails & IPv6 Prefix Segmentation:**
+  - Standardized first-boot script to `bootstrap_ssh.sh` (renamed from `bootstrap.sh`).
+  - Restricted IPv6 prefix delegation: the ISP delegates a single `/64` DHCPv6-PD prefix, so only VLAN 10 receives public GUA + ULA prefixes; VLANs 20, 30, 40, and 41 are restricted to ULA only (`ip6class: "local"`) with `ra_default '0'` router lifetime suppression to prevent dual-stack Internet stalls.
+  - Documented upstream ISP IPv6 characteristics (stable WAN RA SLAAC vs intermittent single `/64` DHCPv6-PD delegation) and DDNS binding architecture.
+  - Fixed Dumb AP service reload in `site.yml` Stage 3, guarding `dnsmasq`, `odhcpd`, and `firewall` with `[ "{{ device_role }}" = "core_router" ]` and setting `dhcp.lan.ignore='1'`.
+  - Added anonymous `network.@bridge-vlan[0]` purges in Stage 1 and Stage 3 to clean factory default VLAN 1.
+  - Added dummy unserved `dhcp.wg0` section in `wireguard` to bind `dnsmasq` without violating `localservice='1'`, and appended `/32` & `/128` CIDR masks to client `.conf` templates.
+  - Added package pre-check for `curl` in Stage 2 and `--timeout=30 -t 3` to SmartDNS blocklist downloads with conditional reload.
 
 ---
 
@@ -52,6 +60,7 @@ Building a portable, rootless QEMU test harness capable of running on **Linux de
 
 ## Up Next / Backlog
 
-- [ ] Perform full security and edge-case audit across `core_router`, `wireless`, `smartdns`, `wireguard`, and `ddns` roles (e.g., `flow_offloading` interaction with WireGuard, IPv6 RA/DHCPv6 timers, `/etc/sysupgrade.conf` completeness).
+- [x] Perform full security and edge-case audit across `core_router`, `wireless`, `smartdns`, `wireguard`, and `ddns` roles (e.g., `flow_offloading` interaction with WireGuard, IPv6 RA/DHCPv6 timers, `/etc/sysupgrade.conf` completeness).
+- [ ] Build Virtual Machine test lab (`test_lab/`) components (`fetch_image.sh`, `isp_client_setup.sh`, `lab.sh`, `inventory_lab.yml`, `run_matrix.py`).
 - [ ] Execute full VM test matrix across OpenWrt `23.05.5`, OpenWrt `24.10.0`, and ImmortalWrt `24.10.0` on both `armsr-armv8` and `malta-le`.
 - [ ] Provision production fleet (`router-nr3053`, `router-32x6v1`, `router-cr6606`) and verify hardware DSA switch VLANs (`bridge vlan show`) and 802.11r fast roaming.

@@ -32,7 +32,7 @@
     set -e
     {% for bl in smartdns_blocklists %}
     if [ ! -s /etc/smartdns/blocklists/{{ bl.name }}.conf ]; then
-      wget -qO /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp "{{ bl.url }}"
+      wget --timeout=30 -t 3 -qO /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp "{{ bl.url }}"
       if [ -s /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp ]; then
         mv /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp /etc/smartdns/blocklists/{{ bl.name }}.conf
         echo "DOWNLOADED"

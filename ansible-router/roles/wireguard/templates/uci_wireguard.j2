@@ -25,6 +25,12 @@ add_list network.wg_peer_{{ peer.name | replace('-', '_') }}.allowed_ips='{{ wir
 del_list firewall.zone_lan.network='wg0'
 add_list firewall.zone_lan.network='wg0'
 
+# Ensure dnsmasq listens on wg0 without serving DHCP (satisfies localservice=1)
+delete dhcp.wg0
+set dhcp.wg0=dhcp
+set dhcp.wg0.interface='wg0'
+set dhcp.wg0.ignore='1'
+
 delete firewall.allow_wan_wireguard
 set firewall.allow_wan_wireguard=rule
 set firewall.allow_wan_wireguard.name='Allow-WireGuard'

@@ -21,6 +21,7 @@ vlans:
     netmask: "255.255.255.0"
     ip6assign: 64
     ip6hint: 20
+    ip6class: "local"
     dhcp: true
   - id: 30
     name: "guest"
@@ -29,6 +30,7 @@ vlans:
     netmask: "255.255.255.0"
     ip6assign: 64
     ip6hint: 30
+    ip6class: "local"
     dhcp: true
   - id: 40
     name: "iot"
@@ -37,6 +39,7 @@ vlans:
     netmask: "255.255.255.0"
     ip6assign: 64
     ip6hint: 40
+    ip6class: "local"
     dhcp: true
   - id: 41
     name: "iot_pub"
@@ -45,6 +48,7 @@ vlans:
     netmask: "255.255.255.0"
     ip6assign: 64
     ip6hint: 41
+    ip6class: "local"
     dhcp: true
 
 ddns_ipv4_interface: "wan"

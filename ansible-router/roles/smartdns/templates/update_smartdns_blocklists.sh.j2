@@ -1,6 +1,12 @@
 #!/bin/sh
+UPDATED=0
 {% for bl in smartdns_blocklists %}
-wget -qO /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp "{{ bl.url }}"
-[ -s /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp ] && mv /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp /etc/smartdns/blocklists/{{ bl.name }}.conf
+wget --timeout=30 -t 3 -qO /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp "{{ bl.url }}"
+if [ -s /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp ]; then
+  mv /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp /etc/smartdns/blocklists/{{ bl.name }}.conf
+  UPDATED=1
+else
+  rm -f /etc/smartdns/blocklists/{{ bl.name }}.conf.tmp
+fi
 {% endfor %}
-/etc/init.d/smartdns restart
+[ "$UPDATED" -eq 1 ] && /etc/init.d/smartdns restart

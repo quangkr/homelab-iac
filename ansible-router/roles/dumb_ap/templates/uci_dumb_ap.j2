@@ -19,6 +19,11 @@ set network.lan6.proto='dhcpv6'
 set network.lan6.reqaddress='try'
 set network.lan6.reqprefix='no'
 
+# Ensure DHCP server is disabled on Dumb AP
+set dhcp.lan=dhcp
+set dhcp.lan.interface='lan'
+set dhcp.lan.ignore='1'
+
 # Configure VLANs 20, 30, 40, 41 as Unmanaged Layer-2 Bridges for Wi-Fi SSIDs
 {% for vlan in vlans if vlan.id != 10 %}
 delete network.{{ vlan.name }}
