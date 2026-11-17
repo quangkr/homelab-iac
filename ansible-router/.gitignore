@@ -1,5 +1,4 @@
 wireguard_clients/
-**/local_secrets.yml
 .vault_pass
 *.retry
 *.swp

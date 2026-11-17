@@ -5,6 +5,8 @@
 - name: Configure OpenWrt / ImmortalWrt Fleet
   hosts: all
   gather_facts: false
+  vars_files:
+    - "{{ playbook_dir }}/../homelab-iac-private/ansible-router/group_vars/all/vault.yml"
 
   pre_tasks:
     - name: Validate exclusive inventory role membership

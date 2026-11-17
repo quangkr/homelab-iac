@@ -1,8 +1,45 @@
 # vim: ft=yaml :
----
+# ==============================================================================
+# Encrypted Secrets Template
+# Copy to: ../homelab-iac-private/ansible-router/group_vars/all/vault.yml
+# Encrypt: ansible-vault encrypt ../homelab-iac-private/ansible-router/group_vars/all/vault.yml
+# ==============================================================================
+
 # PPPoE WAN Credentials
 vault_pppoe_user: "PPPOE_USER"
 vault_pppoe_pass: "PPPOE_PASS"
+
+# Private IPv6 ULA Prefix Base
+ula_base: "fd00:1234:5678"
+
+# WireGuard Server & Peer Keys
+wireguard_endpoint: "vpn.example.com"
+wireguard_port: 56789
+
+wireguard_server_pubkey: "SERVER_PUBLIC_KEY_BASE64="
+wireguard_server_privkey: "SERVER_PRIVATE_KEY_BASE64="
+
+wireguard_peers:
+  - name: "laptop"
+    pubkey: "LAPTOP_PUBLIC_KEY_BASE64="
+    privkey: "LAPTOP_PRIVATE_KEY_BASE64="
+    psk: "LAPTOP_PRESHARED_KEY_BASE64="
+    ip_suffix: 2
+    allowed_ips: "0.0.0.0/0, ::/0"
+
+  - name: "phone"
+    pubkey: "PHONE_PUBLIC_KEY_BASE64="
+    privkey: "PHONE_PRIVATE_KEY_BASE64="
+    psk: "PHONE_PRESHARED_KEY_BASE64="
+    ip_suffix: 3
+    allowed_ips: "0.0.0.0/0, ::/0"
+
+  - name: "admin-split"
+    pubkey: "ADMIN_SPLIT_PUBLIC_KEY_BASE64="
+    privkey: "ADMIN_SPLIT_PRIVATE_KEY_BASE64="
+    psk: "ADMIN_SPLIT_PRESHARED_KEY_BASE64="
+    ip_suffix: 4
+    allowed_ips: "192.168.9.0/24, 192.168.10.0/24, 192.168.20.0/24, 192.168.30.0/24, 192.168.40.0/24, 192.168.41.0/24, fd00:1234:5678::/48"
 
 dhcp_static_leases:
   - name: "home-server"
@@ -82,7 +119,7 @@ ssids:
     hidden: true
     key: "CHANGE_ME_IOT_PUB_PASS"
 
-port_forwards: 
+port_forwards:
   - name: "Lab_HTTP"
     proto: "tcp"
     src_dport: 80
@@ -100,7 +137,7 @@ ipv6_inbound_rules:
   - name: "Lab_HTTP_v6"
     proto: "tcp"
     dest_zone: "lab"
-    # dest_ip: "::10/-64"     #  matches all host if omitted
+    # dest_ip: "::10/-64"     # matches all hosts if omitted
     dest_port: "80"
   - name: "Lab_HTTPS_v6"
     proto: "tcp"
@@ -134,6 +171,3 @@ ddns_domains:
         lookup_host: "ddns-check.home.example.net"
         ipv4: true
         ipv6: true
-
-# Private IPv6 ULA Prefix Base
-ula_base: "fd00:1234:5678"

@@ -1,17 +1,14 @@
 # ImmortalWrt / OpenWrt Fleet Automation with Ansible
 
-Idempotent, Python-free Ansible automation for managing a mixed fleet of **ImmortalWrt** and **OpenWrt** routers and access points. Built around staged execution, quiet `uci -q batch` scripts, and asynchronous network reloads so any device can cleanly switch roles or provision offline without residual configuration drift or premature SSH drops.
-
----
+Idempotent, Python-free Ansible automation for managing a mixed fleet of **ImmortalWrt** and **OpenWrt** routers and access points. Built around staged execution, quiet `uci -q batch` scripts, and asynchronous network reloads so any device can provision cleanly, online or offline, without configuration drift or premature SSH drops.
 
 ## Supported Device Roles
 
 Any device in `inventory.yml` can be configured as one of three roles:
+
 1. **Wired-Only Core Router** (`core_routers` group + `wireless_enabled: false`)
 2. **Core Router with Wireless** (`core_routers` group + `wireless_enabled: true`)
 3. **Dumb AP** (`dumb_aps` group)
-
----
 
 ## Architecture & Network Design
 
@@ -25,6 +22,7 @@ Any device in `inventory.yml` can be configured as one of three roles:
 | - | `wg0` | `192.168.9.0/24` | `:9::/64` | WireGuard VPN | Grouped into `lan` zone (full access) |
 
 ### Key Implementation Details
+
 - **Reset-Gated Role Enforcement (`site.yml` & `common`):**
   - Each provisioned device records its active role (`core_router` or `dumb_ap`) in `/etc/ansible_device_role` and registers that path in `/etc/sysupgrade.conf` so firmware upgrades preserve it while `firstboot` wipes it.
   - If a device is moved between `core_routers` and `dumb_aps` in `inventory.yml` without a factory reset, `site.yml` halts immediately in `pre_tasks` with `ROLE_MISMATCH` to prevent residual router state or SSH lockouts.
@@ -35,25 +33,30 @@ Any device in `inventory.yml` can be configured as one of three roles:
 - **Per-Port VLAN Tagging (`port_vlans`):** Configured per physical port in `host_vars/<device>.yml` (`pvid` sets `:u*` untagged/PVID ingress+egress; `tagged` sets `:t`). Defaults to `default_pvid_vlan: 10` with all other VLANs tagged if omitted.
 - **IPv6, Inbound Rules & Multi-Domain DDNS:** PPPoE `wan` uses `ipv6='1'` paired with an explicit `wan6` (`dhcpv6`) interface with `peerdns='0'`. IPv4 services are exposed via `port_forwards` (`DNAT`), while IPv6 services use port-specific `ipv6_inbound_rules` with negative-netmask host suffixes (e.g., `::10/-64`) to survive dynamic ISP prefix changes. Cloudflare DDNS supports multiple zones and per-subdomain IPv4 (`wan`) / IPv6 (`wan6`) toggles.
 - **Split-Horizon DNS & Ad-Blocking:** `dnsmasq` listens on port `53` across all VLANs and `wg0` (`noresolv='1'`, `localuse='1'`) for DHCP, `.home.arpa` local resolution, and static split-DNS overrides (using `ip6: "::"` to suppress public Cloudflare `AAAA`/`HTTPS` leaks via `NODATA`). Once Stage 2 completes, `smartdns` on `127.0.0.1:5353` (Quad9 DoH/DoT by IP + OISD Small & HaGeZi Pro Mini `domain-set` lists via `/etc/smartdns/custom.conf`) seamlessly overrides the `9.9.9.9` fallback in the same commit pass.
-- **Split Secrets Design:**
-  - `group_vars/all/vault.yml` (Ansible Vault encrypted): PPPoE credentials, `ula_base`, `ssids`, `dhcp_static_leases`, `dhcp_static_domains`, `port_forwards`, `ipv6_inbound_rules`, and `ddns_domains`.
-  - `group_vars/all/local_secrets.yml` (git-ignored): WireGuard port, endpoint, server private/public keys, and peer definitions/keys.
+- **Externalized Single-File Vault Design:**
+  - All sensitive variables (PPPoE credentials, `ula_base`, WireGuard server/peer keys, SSIDs, static leases/domains, port forwards, IPv6 rules, and Cloudflare DDNS tokens) live in a single Ansible-Vault encrypted file outside this repository: `../homelab-iac-private/ansible-router/group_vars/all/vault.yml`
+  - Loaded automatically via `vars_files` in `site.yml`.
 
 ## Initial Control Node Setup
 
 ### 1. Install Dependencies
+
 ```bash
 # Tools for generating WireGuard keys and mobile QR codes
 sudo apt install wireguard-tools qrencode   # or: brew install wireguard-tools qrencode
 ```
 
-### 2. Configure Secrets (`vault.yml` & `local_secrets.yml`)
-1. Copy the example secret files:
+### 2. Configure Secrets (`vault.yml`)
+
+1. Create the sibling private directory and copy the example vault template into it:
+
    ```bash
-   cp group_vars/all/vault.yml.example group_vars/all/vault.yml
-   cp group_vars/all/local_secrets.yml.example group_vars/all/local_secrets.yml
+   mkdir -p ../homelab-iac-private/ansible-router/group_vars/all
+   cp group_vars/all/vault.yml.example ../homelab-iac-private/ansible-router/group_vars/all/vault.yml
    ```
+
 2. Generate WireGuard keys on the control node for the server and each peer:
+
    ```bash
    # Server keypair
    PRIV=$(wg genkey); echo "Server Priv: $PRIV"; echo "Server Pub:  $(echo "$PRIV" | wg pubkey)"
@@ -61,27 +64,30 @@ sudo apt install wireguard-tools qrencode   # or: brew install wireguard-tools q
    # Peer keypair + PSK (run once per client)
    PRIV=$(wg genkey); echo "Peer Priv: $PRIV"; echo "Peer Pub:  $(echo "$PRIV" | wg pubkey)"; echo "Peer PSK:  $(wg genpsk)"
    ```
-3. Populate `group_vars/all/local_secrets.yml` (git-ignored) with the WireGuard port, endpoint, server keys, and `wireguard_peers` list.
-4. Fill in `group_vars/all/vault.yml` (PPPoE credentials, `ula_base`, SSIDs/passphrases, `dhcp_static_leases`, `dhcp_static_domains`, `port_forwards`, `ipv6_inbound_rules`, and Cloudflare DDNS domains/tokens) and encrypt it:
-   ```bash
-   ansible-vault encrypt group_vars/all/vault.yml
-   ```
-   *(Always use `ansible-vault edit group_vars/all/vault.yml` for future edits so plaintext secrets are never left on disk.)*
 
----
+3. Fill in `../homelab-iac-private/ansible-router/group_vars/all/vault.yml` (PPPoE credentials, `ula_base`, WireGuard server/peer keys, SSIDs/passphrases, `dhcp_static_leases`, `dhcp_static_domains`, `port_forwards`, `ipv6_inbound_rules`, and Cloudflare DDNS domains/tokens) and encrypt it:
+
+   ```bash
+   ansible-vault encrypt ../homelab-iac-private/ansible-router/group_vars/all/vault.yml
+   ```
+
+   *(Always use `ansible-vault edit ../homelab-iac-private/ansible-router/group_vars/all/vault.yml` for future edits so plaintext secrets are never left on disk.)*
 
 ## Preparing & Bootstrapping a Fresh / Reset Router
 
 1. **Set a root password** via LuCI (`http://192.168.1.1`) or serial/telnet (`passwd`) to enable Dropbear SSH.
 2. **Verify physical port and radio names** on new hardware models before running Ansible:
+
    ```bash
    ssh root@192.168.1.1 "ls /sys/class/net && iwinfo"
    ```
+
    Update `wan_port`, `lan_ports`, `all_ports`, `port_vlans`, and `radios` (`2g` vs `5g`) in `host_vars/<device>.yml` to match the hardware output.
-3. **Run the bootstrap script** from the repository root (ensure `chmod +x bootstrap_ssh.sh` has been run once):
+3. **Run the bootstrap script** from the project root (ensure `chmod +x bootstrap_ssh.sh` has been run once):
    ```bash
    ./bootstrap_ssh.sh router-nr3053
    ```
+
    *What `bootstrap_ssh.sh` does:*
    - Removes any stale `192.168.1.1` entry from `~/.ssh/known_hosts`.
    - Copies your SSH public key (`~/.ssh/id_ed25519.pub` by default, or override with `PUBKEY=/path/to/key.pub`) into `/etc/dropbear/authorized_keys` with `0600` permissions.
@@ -102,6 +108,7 @@ ansible-playbook site.yml --ask-vault-pass
 # Apply changes to a single device
 ansible-playbook site.yml --limit router-nr3053 --ask-vault-pass
 ```
+
 *(Tip: Store your vault password in `~/.ansible_vault_pass` with `chmod 0600` and pass `--vault-password-file ~/.ansible_vault_pass` instead of `--ask-vault-pass`.)*
 
 ### Manual Initial Provisioning (If SSH Key Is Already Installed)
@@ -112,39 +119,44 @@ If `/etc/dropbear/authorized_keys` is already present on a `192.168.1.1` device,
 ansible-playbook site.yml --limit router-32x6v1 -e "bootstrap_ip=192.168.1.1" --ask-vault-pass
 ```
 
----
-
 ## Role-Switching Guide (Reset-Gated)
 
 Every device stamps its active role (`core_router` or `dumb_ap`) into `/etc/ansible_device_role` (preserved across `sysupgrade`, wiped by `firstboot`). If a device's inventory group changes without a factory reset, `site.yml` halts immediately with `ROLE_MISMATCH` to prevent residual router state or SSH lockouts.
 
 ### 1. Toggle Wi-Fi On/Off on the Core Router (In-Place)
+
 Changing `wireless_enabled` is not a role change and runs in-place without a reset. Edit `host_vars/router-nr3053.yml` and set `wireless_enabled: false` (Wired-Only) or `true` (Core + Wireless), then run:
+
 ```bash
 ansible-playbook site.yml --limit router-nr3053 --ask-vault-pass
 ```
 
 ### 2. Switch a Device Between `core_routers` and `dumb_aps`
+
 1. **Factory-reset the target device** to clear `/overlay` and `/etc/ansible_device_role`:
+
    ```bash
    ssh root@<current_ip> "firstboot -y && reboot"
    ```
+
 2. **Update inventory and host variables:**
    - Move the host between `core_routers` and `dumb_aps` in `inventory.yml`.
    - Update `ansible_host` in `host_vars/<device>.yml` (`192.168.10.1` for `core_routers`, or `192.168.10.<ap_ip_suffix>` for `dumb_aps`).
+
 3. **Re-bootstrap from `192.168.1.1`:**
    Connect to the reset device, set a root password if required by the image, and run:
+
    ```bash
    ./bootstrap_ssh.sh <device> 192.168.1.1
    ```
 
----
-
 ## WireGuard Client Profiles
 
 Running `site.yml` against `core_routers` automatically renders ready-to-import client `.conf` files into `./wireguard_clients/` (git-ignored).
+
 - **Desktop import:** Import `wireguard_clients/<peer>.conf` directly into the WireGuard app.
 - **Mobile QR code:**
+
   ```bash
   qrencode -t ansiutf8 < wireguard_clients/phone.conf
   ```
