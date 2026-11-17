@@ -2,3 +2,9 @@ wireguard_clients/
 .vault_pass
 *.retry
 *.swp
+__pycache__/
+*.pyc
+test_lab/cache/
+test_lab/base_images/
+test_lab/run/
+test_lab/keys/

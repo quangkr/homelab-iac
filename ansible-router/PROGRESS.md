@@ -28,39 +28,25 @@
 
 ---
 
-## In Progress — Virtual Machine Test Lab Setup (`test_lab/`)
-
-Building a portable, rootless QEMU test harness capable of running on **Linux desktop (KVM)**, **Windows desktop**, or **Debian `proot-distro` under Android Termux (TCG)** to validate the entire fleet across OpenWrt and ImmortalWrt releases before deploying to physical hardware.
-
-### Planned Test Lab Architecture
-
-- **Userspace L2 Networking:** QEMU UDP multicast switches (`-netdev socket,mcast=230.0.0.1:1001` for WAN, `:1002` for LAN trunk) with `virtio-net-pci` NICs (preserves 802.1Q VLAN tags without host root/TAP interfaces).
-- **Guest Targets Matching Fleet ISAs:**
-  - `armsr/armv8` (`qemu-system-aarch64 -M virt -cpu cortex-a53`) — matches `router-nr3053` (MT7981).
-  - `malta/le` (`qemu-system-mipsel -M malta -cpu 24Kc`) — matches `router-32x6v1` & `router-cr6606` (MT7621).
-  - Selectable `OPENWRT_FLAVOR` (`openwrt` / `immortalwrt`), `OPENWRT_VERSION` (`23.05.5`, `24.10.0`), and `OPENWRT_ARCH` backed by Copy-on-Write `qcow2` overlays for <1s factory resets.
-- **ISP & Client Harness VM (`isp-and-client-harness`):**
-  - `netns isp` (`eth1`): `rp-pppoe` server (PAP/CHAP), DHCPv6-PD server delegating dynamic `/56` prefixes, mock Quad9 (`9.9.9.9` UDP/53 + DoT/853 + DoH/443), mock Cloudflare DDNS API (`104.16.132.229` logging payloads), and WireGuard remote peer (`192.168.9.2`).
-  - `netns client` (`eth2.{10,20,30,40,41}`): Automated DHCPv4/v6, DNS split-horizon/ad-block, and inter-VLAN + WAN inbound firewall probe runner.
-
-### Test Lab Implementation Checklist
-
-- [ ] `test_lab/fetch_image.sh`: Download OpenWrt/ImmortalWrt kernel + ext4 rootfs, resize rootfs to 256 MB, and inject Dropbear SSH public key offline via `e2fsprogs` `debugfs`.
-- [ ] `test_lab/isp_client_setup.sh`: Provision `isp` and `client` network namespaces, PPPoE server, DHCPv6-PD prefix rotation, mock Quad9 & Cloudflare API endpoints, and WireGuard test peer.
-- [ ] `test_lab/lab.sh`: Orchestrate VMs (`up`, `reset-core`, `reset-ap`, `wan-up`, `wan-down`, `down`) using ephemeral `qcow2` snapshots.
-- [ ] `test_lab/inventory_lab.yml`: Map QEMU `eth0..3` and `radio0..1` (`mac80211_hwsim`) to `core_routers` and `dumb_aps`.
-- [ ] `test_lab/run_matrix.py`: Execute the Reset-Gated test matrix and assertions:
-  - [ ] **CR-1 / CR-2:** Fresh Core Router (`192.168.1.1`) with Wi-Fi enabled vs disabled (`wireless_enabled: false`), PPPoE connected on Run 1.
-  - [ ] **CR-3 / CR-4:** Fresh Core Router provisioned offline (`wan-down`), verifying `9.9.9.9` DNS fallback and base routing/firewall before Run 2, followed by `wan-up` + Run 2 upgrade to SmartDNS/WireGuard/DDNS.
-  - [ ] **AP-1 / AP-2:** Fresh Dumb AP (`192.168.1.1`) with Core Router trunk connected before vs after Ansible run.
-  - [ ] **RG-1:** Verify Reset-Gate halts with `ROLE_MISMATCH` if inventory role changes without `firstboot`, and succeeds after `reset-core`/`reset-ap`.
-  - [ ] **IDEM-1:** Re-run `site.yml` immediately after every scenario and assert `changed=0`.
+- **Virtual Machine Test Lab Setup (`test_lab/`):**
+  - Created rootless QEMU test lab supporting OpenWrt `23.05.5` and ImmortalWrt `25.12.2` across `armsr/armv8` (matching MT7981 `router-nr3053` & `router-32x6v1`) and `malta/le` (matching MT7621 `router-cr6606`).
+  - Built `test_lab/fetch_image.sh` with offline Dropbear SSH key injection via `debugfs` directly on ext4 images without host root.
+  - Built `test_lab/lab.sh` orchestrator with userspace UDP multicast L2 networking (`230.0.0.1:1001` WAN, `:1002` LAN trunk) and sub-second ephemeral `qcow2` overlay snapshots.
+  - Built `test_lab/inventory_lab.yml` mapping virtio NICs and ports to `core_routers` (`lab-core`) and `dumb_aps` (`lab-ap`).
+  - Built `test_lab/mock_isp.py` providing userspace mock DNS and Cloudflare DDNS REST API validation.
+  - Built `test_lab/run_matrix.py` implementing the automated Reset-Gated scenario matrix (CR-1..4, AP-1..2, RG-1, IDEM-1).
+- **PPPoE Upstream Emulation & Password-Free Mock Fixtures:**
+  - Implemented `test_lab/mock_pppoe.py`: a rootless userspace PPPoE Access Concentrator operating over QEMU multicast (`230.0.0.1:1001`). Handles PPPoE Discovery (`PADI`/`PADO`/`PADR`/`PADS`/`PADT`), PPP LCP negotiation, PAP authentication (`lab_test_user`/`lab_test_pass`), IPCP dynamic IPv4 assignment (`100.64.0.2`), and IPv6CP negotiation with periodic ICMPv6 Router Advertisements for SLAAC WAN IPv6 configuration.
+  - Integrated PPPoE server into `test_lab/mock_isp.py` with multi-service threading (`--pppoe-only`, `--dns-only`, `--cf-only`, `--no-pppoe`).
+  - Created `test_lab/vault_mock.yml`: unencrypted, syntactically and cryptographically valid mock secrets fixture (valid Curve25519 WireGuard keys, mock PPPoE credentials, split-horizon domains, mock Cloudflare tokens).
+  - Pluggable Vault in `site.yml`: enabled `vault_file | default(...)` in `site.yml` and configured `test_lab/inventory_lab.yml` and `test_lab/run_matrix.py` to seamlessly execute playbooks in test lab mode without entering vault passwords or exposing production secrets.
+  - Documented PPPoE 8-byte framing overhead (MTU 1492 vs 1500), mandatory TCP MSS clamping (`mtu_fix '1'`), and `@wan` dynamic alias binding in `AGENTS.md` and `README.md`.
 
 ---
 
 ## Up Next / Backlog
 
 - [x] Perform full security and edge-case audit across `core_router`, `wireless`, `smartdns`, `wireguard`, and `ddns` roles (e.g., `flow_offloading` interaction with WireGuard, IPv6 RA/DHCPv6 timers, `/etc/sysupgrade.conf` completeness).
-- [ ] Build Virtual Machine test lab (`test_lab/`) components (`fetch_image.sh`, `isp_client_setup.sh`, `lab.sh`, `inventory_lab.yml`, `run_matrix.py`).
-- [ ] Execute full VM test matrix across OpenWrt `23.05.5`, OpenWrt `24.10.0`, and ImmortalWrt `24.10.0` on both `armsr-armv8` and `malta-le`.
+- [x] Build Virtual Machine test lab (`test_lab/`) components (`fetch_image.sh`, `lab.sh`, `inventory_lab.yml`, `mock_isp.py`, `run_matrix.py`, `mock_pppoe.py`, `vault_mock.yml`).
+- [ ] Execute full VM test matrix across OpenWrt `23.05.5` and ImmortalWrt `25.12.2` on both `armsr-armv8` and `malta-le`.
 - [ ] Provision production fleet (`router-nr3053`, `router-32x6v1`, `router-cr6606`) and verify hardware DSA switch VLANs (`bridge vlan show`) and 802.11r fast roaming.

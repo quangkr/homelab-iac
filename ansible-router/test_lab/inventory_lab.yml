@@ -1,0 +1,50 @@
+---
+# ==============================================================================
+# test_lab/inventory_lab.yml — QEMU Test Lab Fleet Inventory
+# ==============================================================================
+all:
+  vars:
+    ansible_user: root
+    ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    vault_file: "{{ playbook_dir }}/test_lab/vault_mock.yml"
+  children:
+    core_routers:
+      hosts:
+        lab-core:
+          ansible_host: 127.0.0.1
+          ansible_port: 2222
+          hardware_model: "QEMU Virt"
+          wireless_enabled: false
+          ap_ip_suffix: 9
+          wan_port: "eth0"
+          wan_vlan_tag: none
+          lan_ports:
+            - "eth1"
+            - "eth2"
+          all_ports:
+            - "eth0"
+            - "eth1"
+            - "eth2"
+          port_vlans:
+            eth1:
+              pvid: 10
+              tagged: "all"
+            eth2:
+              pvid: 20
+              tagged: []
+    dumb_aps:
+      hosts:
+        lab-ap:
+          ansible_host: 127.0.0.1
+          ansible_port: 2223
+          hardware_model: "QEMU Virt"
+          ap_ip_suffix: 2
+          wireless_enabled: false
+          wan_port: "eth0"
+          wan_vlan_tag: none
+          lan_ports:
+            - "eth0"
+            - "eth1"
+          all_ports:
+            - "eth0"
+            - "eth1"

@@ -68,11 +68,17 @@ git_root/
    - The WAN RA address is reliable, but the DHCPv6-PD prefix can sometimes be intermittent or absent during dial-up renegotiation.
    - For DDNS, `ddns_ipv6_interface` tracks `wan6` (`ip_source='network'`), reading the stable WAN RA IP address via `ubus call network.interface.wan6 status` rather than relying on delegated LAN prefixes.
    - For local subnets, ULA (`network.globals.ula_prefix`) guarantees unbroken local IPv6 routing and split-DNS resolution even when ISP prefix delegation is temporarily absent.
+8. **Upstream PPPoE WAN & Framing:**
+   - The core router connects to the upstream ISP via PPPoE (`proto 'pppoe'`).
+   - PPPoE introduces an 8-byte encapsulation overhead, constraining the WAN MTU to 1492 (compared to standard 1500 Ethernet).
+   - TCP MSS clamping (`mtu_fix '1'`) is mandatory on the `wan` firewall zone to clamp MSS to 1452 bytes, preventing silent packet drops and path MTU blackholes.
+   - The `wan6` interface binds to `@wan` (`device '@wan'`), meaning the IPv6 SLAAC/DHCPv6 protocol stack dynamically anchors to the virtual `pppoe-wan` link established by the PPPoE daemon (`pppd`).
+   - The test lab simulates this topology via a rootless userspace PPPoE Access Concentrator (`test_lab/mock_pppoe.py`) listening on QEMU's multicast WAN bus (`230.0.0.1:1001`).
 
 ## 3. Fleet Hardware & Driver Quirks
 
 - **`router-nr3053` (Viettel NR3053 — MediaTek MT7981, `aarch64`):** Uses proprietary MediaTek SDK wireless names (`MT7981_1_1` / `phy: ra0` for 2.4 GHz, `MT7981_1_2` / `phy: rax0` for 5 GHz) and switch port names `wan`, `lan1..lan3`.
-- **`router-32x6v1` (Viettel VAP 32x6v1 — MediaTek MT7621, `mipsel_24kc`):** Standard `mac80211` (`radio0`, `radio1`) and `eth0..eth2`.
+- **`router-32x6v1` (Viettel VAP 32x6v1 — MediaTek MT7981, `aarch64`):** Shares MT7981 CPU with `router-nr3053`, but ethernet port naming and switch layout are unconfirmed (provisionally configured as `eth0..eth2`).
 - **`router-cr6606` (Xiaomi CR6606 — MediaTek MT7621, `mipsel_24kc`):** Standard `mac80211` (`radio0`, `radio1`) and `eth0..eth2`.
 - Always sanitize dynamic string identifiers (e.g., DHCP lease hostnames) with `regex_replace` before writing `uci batch` lines.
 

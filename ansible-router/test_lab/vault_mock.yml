@@ -1,0 +1,161 @@
+# ==============================================================================
+# test_lab/vault_mock.yml — Unencrypted Mock Secrets for Test Lab
+# ==============================================================================
+# Provides syntactically and functionally valid mock fixtures for all variables
+# in group_vars/all/vault.yml.example to allow password-free lab execution.
+# ==============================================================================
+
+# PPPoE WAN Credentials (matches mock_pppoe.py)
+vault_pppoe_user: "lab_test_user"
+vault_pppoe_pass: "lab_test_pass"
+
+# Private IPv6 ULA Prefix Base
+ula_base: "fd00:cafe:babe"
+
+# WireGuard Server & Peer Keys (Syntactically valid 32-byte Curve25519 base64)
+wireguard_endpoint: "vpn.lab.example.com"
+wireguard_port: 56789
+
+wireguard_server_pubkey: "NPCEo6mw/7UYwrhyfI4wNrrUWw+vmlYIOucCQ6MRu3s="
+wireguard_server_privkey: "F/H9IV6zCxOQKZN3gejrHsBKVWxteWPL4KHSJ4ipkek="
+
+wireguard_peers:
+  - name: "laptop"
+    pubkey: "7ZjvYT0HW1vYYrbnNKu6HQmiITYH+HJdlg7zykEZKks="
+    privkey: "9JmL/jcYC2nZtWkO8jFaOrynwH3y5wnDNaQqfEEflzo="
+    psk: "i1byAIsy5dxyd1SzR+wnomWS+eLRQlQYO/80/8qHWd8="
+    ip_suffix: 2
+    allowed_ips: "0.0.0.0/0, ::/0"
+
+  - name: "phone"
+    pubkey: "ZyjB44JdfoD08SMIvrnoxspl19Gfqg1mVONIRcQvyNk="
+    privkey: "bfQ5I0MLZYPZlDsez0z6LJ8N9pdWIrTevP8vvxRcNzA="
+    psk: "PLi00CTwRUwH4bJBhVb40flnrW1OOyO5UxogOeFYx2U="
+    ip_suffix: 3
+    allowed_ips: "0.0.0.0/0, ::/0"
+
+  - name: "admin-split"
+    pubkey: "xScyFlGR2987EjA3oG5yCcQ/o8D73bVzqLPpB67dFOA="
+    privkey: "DVbgR7C/GMAR9wQltQdOgJ1iYBDRiVONWGWS9ROQstc="
+    psk: "pOkzndZ2ApfZoaoDlhmUpoLCkMVYXqEvzwY96Ep58aE="
+    ip_suffix: 4
+    allowed_ips: "192.168.9.0/24, 192.168.10.0/24, 192.168.20.0/24, 192.168.30.0/24, 192.168.40.0/24, 192.168.41.0/24, fd00:cafe:babe::/48"
+
+# Static DHCP Leases Fixture
+dhcp_static_leases:
+  - name: "lab-server"
+    mac: "52:54:00:aa:bb:01"
+    ip: "192.168.10.10"
+    hostid: "10"
+  - name: "lab-nas"
+    mac: "52:54:00:aa:bb:02"
+    ip: "192.168.10.20"
+    hostid: "20"
+  - name: "lab-tv"
+    mac: "52:54:00:aa:bb:03"
+    ip: "192.168.30.50"
+    hostid: "50"
+
+# Split-Horizon DNS Fixture (tests NODATA suppression on ip6 == '::')
+dhcp_static_domains:
+  - name: "jellyfin.lab.example.com"
+    ip: "192.168.20.10"
+    ip6: "fd00:cafe:babe:20::10"
+  - name: "ha.lab.example.com"
+    ip: "192.168.20.20"
+    ip6: "::"
+
+# Wi-Fi SSIDs Fixture
+ssids:
+  - id: "main"
+    band_ssids:
+      2g: "LabMainWifi-2G"
+      5g: "LabMainWifi-5G"
+    network: "lan"
+    encryption: "sae-mixed"
+    ieee80211r: true
+    mobility_domain: "4f57"
+    hidden: true
+    key: "MockPassword123"
+
+  - id: "lab"
+    band_ssids:
+      2g: "LabWifi-2G"
+      5g: "LabWifi-5G"
+    network: "lab"
+    encryption: "sae-mixed"
+    ieee80211r: true
+    mobility_domain: "4f58"
+    hidden: true
+    key: "MockPassword123"
+
+  - id: "guest"
+    band_ssids:
+      2g: "LabGuest-2G"
+      5g: "LabGuest-5G"
+    network: "guest"
+    encryption: "sae-mixed"
+    ieee80211r: true
+    mobility_domain: "4f59"
+    hidden: false
+    key: "MockPassword123"
+
+  - id: "iot"
+    band_ssids:
+      2g: "LabIot-2G"
+    network: "iot"
+    encryption: "psk2+ccmp"
+    ieee80211r: false
+    hidden: true
+    key: "MockPassword123"
+
+  - id: "iot_pub"
+    band_ssids:
+      2g: "LabIotPub-2G"
+    network: "iot_pub"
+    encryption: "psk2+ccmp"
+    ieee80211r: false
+    hidden: true
+    key: "MockPassword123"
+
+# Port Forwards Fixture (IPv4 DNAT)
+port_forwards:
+  - name: "Lab_HTTP"
+    proto: "tcp"
+    src_dport: 80
+    dest_zone: "lab"
+    dest_ip: "192.168.20.2"
+  - name: "Lab_HTTPS"
+    proto: "tcp"
+    src_dport: 443
+    dest_zone: "lab"
+    dest_ip: "192.168.20.2"
+    dest_port: 443
+
+# IPv6 Inbound Traffic Rules Fixture
+ipv6_inbound_rules:
+  - name: "Lab_HTTP_v6"
+    proto: "tcp"
+    dest_zone: "lab"
+    dest_ip: "::10/-64"
+    dest_port: "80"
+  - name: "Lab_HTTPS_v6"
+    proto: "tcp"
+    dest_zone: "lab"
+    dest_ip: "::10/-64"
+    dest_port: "443"
+
+# Cloudflare DDNS Domains Fixture (matches mock_isp.py mock API)
+ddns_domains:
+  - zone: "example.com"
+    api_token: "mock_cf_token_12345"
+    ipv4: true
+    ipv6: true
+    subdomains:
+      - name: "@"
+      - name: "lab"
+        ipv4: true
+        ipv6: false
+      - name: "vpn"
+        ipv4: true
+        ipv6: true
