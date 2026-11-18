@@ -1,91 +1,66 @@
-# AGENTS.md — OpenWrt / ImmortalWrt Fleet Automation Guide
+# AGENTS.md - OpenWrt / ImmortalWrt Fleet Automation Guide
 
-This file provides architectural rules, hardware constraints, and conventions for AI assistants working on `ansible-router`.
+Architectural rules, hardware constraints, and conventions for AI assistants working on ansible-router.
 
 ## 1. Repository & Secrets Topology
 
-```text
-git_root/
-├── ansible-router/                        # This repository
-│   ├── AGENTS.md                          # Architectural guardrails & coding rules
-│   ├── PROGRESS.md                        # Milestones, active test-lab work & backlog
-│   ├── README.md                          # User setup & operations manual
-│   ├── ansible.cfg                        # Dropbear-compatible SSH/SCP settings
-│   ├── bootstrap_ssh.sh                   # First-boot SSH key injector + playbook runner
-│   ├── inventory.yml                      # Fleet inventory (core_routers vs dumb_aps)
-│   ├── site.yml                           # Single-play, 3-stage, reset-gated playbook
-│   ├── group_vars/
-│   │   ├── all/main.yml                   # Non-secret VLAN, subnet & blocklist definitions
-│   │   ├── all/vault.yml.example          # Template for all encrypted variables
-│   │   ├── core_routers.yml               # device_role: core_router, ip_suffix: 1
-│   │   └── dumb_aps.yml                   # device_role: dumb_ap, wireless_enabled: true
-│   ├── host_vars/                         # Per-device ports, radios & ap_ip_suffix
-│   ├── roles/                             # common, core_router, dumb_ap, wireless, wireguard, ddns, smartdns
-│   └── tasks/deploy_template.yml          # Python-free SSH stdin template uploader
-└── homelab-iac-private/                   # External private repository
-    └── ansible-router/
-        ├── group_vars/all/vault.yml       # Single Ansible-Vault encrypted secrets file
-        └── wireguard_clients/             # Rendered client WireGuard .conf profiles
-```
-
-- **Secrets Rule:** Never create or reference `local_secrets.yml` or store client `.conf` profiles in this repository. All secrets (PPPoE, WireGuard keys, Wi-Fi keys, Cloudflare API tokens, static leases/domains, port forwards) reside in `../homelab-iac-private/ansible-router/group_vars/all/vault.yml` and client WireGuard configs are rendered directly to `../homelab-iac-private/ansible-router/wireguard_clients/`.
+- Public repository: `ansible-router/`
+  - Playbooks, roles, inventory, and templates. Zero plaintext secrets or client `.conf` files.
+- Private repository: `../homelab-iac-private/ansible-router/`
+  - `group_vars/all/vault.yml`: Single Ansible-Vault file holding all secrets (PPPoE, WireGuard keys, Wi-Fi PSKs, Cloudflare tokens, static leases/domains, port forwards).
+  - `wireguard_clients/`: Plaintext rendered client WireGuard `.conf` profiles.
+  - All plaintext secrets must be git-ignored.
 
 ## 2. Hard Architectural Invariants (Do Not Violate)
 
-1. **Zero-Python Target Execution:**
-   - Target devices run OpenWrt / ImmortalWrt without Python.
-   - Never use Python-dependent Ansible modules (`template`, `copy`, `lineinfile`, `package`, `service`, `setup`) against target routers.
-   - Use strictly `raw` (POSIX `/bin/sh`, `uci`, `ubus`, `awk`, `md5sum`) or `include_tasks: "{{ playbook_dir }}/tasks/deploy_template.yml"` (which renders Jinja2 on `localhost` and streams via `ssh ... 'cat > dest.tmp'`).
-2. **Reset-Gated Role Model (No In-Place Role Switching):**
-   - Devices belong to exclusively one group: `core_routers` OR `dumb_aps`.
-   - `roles/common` writes `{{ device_role }}` to `/etc/ansible_device_role` and adds that path to `/etc/sysupgrade.conf`.
-   - `site.yml` `pre_tasks` halts with `ROLE_MISMATCH` if `/etc/ansible_device_role` disagrees with `{{ device_role }}`. Switching roles requires `firstboot -y && reboot` followed by `./bootstrap_ssh.sh <host> 192.168.1.1`.
-   - Do **not** re-introduce bidirectional teardown hacks (`wg0`/`wan`/`dnsmasq` cleanup in `dumb_ap`). Toggling `wireless_enabled` on `core_router` *is* supported in-place.
-3. **3-Stage Execution & Numeric `.uci` Fragment Ordering:**
-   - Roles never mutate `/etc/config/*` directly; they render `.uci` batch fragments into `/etc/ansible_uci/`:
-     - `10_10_common.uci` (`common`)
-     - `10_20_core_router.uci` (`core_router`) or `10_20_dumb_ap.uci` (`dumb_ap`)
-     - `10_30_wireless.uci` (`wireless`)
-     - `20_10_wireguard.uci` (`wireguard`)
-     - `20_20_smartdns.uci` (`smartdns`)
-     - `20_30_ddns.uci` (`ddns`)
-   - **Stage 1:** Renders `10_*.uci`. Only when `bootstrap_ip` is defined does Stage 1 apply `10_*.uci` immediately, switch `ansible_host` to VLAN 10 (`192.168.10.1` or `192.168.10.<ap_ip_suffix>`), and wait for SSH.
-   - **Stage 2 (`core_routers` only):** Waits up to 40s for `ubus call network.interface.wan status` (`"up": true`) if add-on packages are missing, installs packages, and renders `20_*.uci`. On offline/unreachable WAN, `rescue` deletes `20_*.uci` so `dnsmasq` retains its `9.9.9.9` fallback.
-   - **Stage 3:** Snapshots per-file `md5sum` hashes of `/etc/config/*`, deletes dynamic anonymous UCI sections (`firewall.@{defaults,zone,forwarding,rule,redirect}`, `network.@device`, `dhcp.@{host,domain}`, `wireless.@wifi-iface`, `ddns.@service`), replays `10_*.uci` then `20_*.uci` via `uci -q batch`, commits, and restarts only services whose config MD5 changed.
-4. **Dual Package Manager Support (`apk` + `opkg`):**
-   - Always check `command -v apk >/dev/null 2>&1` before falling back to `opkg` so playbooks work across both OpenWrt 23.05 (`opkg`) and 24.10+ / snapshots (`apk`).
-5. **Network & Firewall Segmentation:**
-   - VLAN 10 (`lan`, `192.168.10.0/24`): Management + full access (includes `wg0`, `192.168.9.0/24`). Only VLAN that receives both GUA and ULA IPv6 prefixes (the upstream ISP delegates a single `/64` prefix, so only one local VLAN can receive public GUA).
-   - VLAN 20 (`lab`, `192.168.20.0/24`): WAN + `iot` only. Restricted to ULA only (`ip6class: 'local'`) with `ra_default '0'`.
-   - VLAN 30 (`guest`, `192.168.30.0/24`): WAN + `lab` only. Restricted to ULA only (`ip6class: 'local'`) with `ra_default '0'`.
-   - VLAN 40 (`iot`, `192.168.40.0/24`): Isolated, **no WAN**. Restricted to ULA only (`ip6class: 'local'`) with `ra_default '0'`.
-   - VLAN 41 (`iot_pub`, `192.168.41.0/24`): WAN only, isolated from all other VLANs. Restricted to ULA only (`ip6class: 'local'`) with `ra_default '0'`.
-   - Never add blanket `wan -> lab` zone forwarding. IPv4 uses `redirect` (`DNAT`); IPv6 uses port-specific `rule` entries with negative-netmask suffixes (e.g., `::10/-64`).
-6. **Split-Horizon DNS & Leak Prevention:**
-   - `dnsmasq` owns port `53` (`noresolv='1'`, `localuse='1'`). Static hostnames in `dhcp_static_domains` with `ip6: "::"` add `server=/<fqdn>/` so `dnsmasq` answers `NODATA` for `AAAA` and `HTTPS` (type 65) queries instead of leaking public Cloudflare AAAA records.
-   - `smartdns` runs on `127.0.0.1:5353` (`auto_set_dnsmasq='0'`) with Quad9 DoH/DoT and `domain-set` blocklists.
-7. **Upstream ISP IPv6 Characteristics & DDNS:**
-   - The upstream ISP provides a WAN IPv6 address via Router Advertisements (RA/SLAAC) on `wan6` and delegates a single `/64` prefix via DHCPv6-PD. Because only a single `/64` prefix is delegated, only one VLAN (VLAN 10) can receive a public GUA prefix; all other VLANs use private ULA prefixes (`ip6class: 'local'`).
-   - The WAN RA address is reliable, but the DHCPv6-PD prefix can sometimes be intermittent or absent during dial-up renegotiation.
-   - For DDNS, `ddns_ipv6_interface` tracks `wan6` (`ip_source='network'`), reading the stable WAN RA IP address via `ubus call network.interface.wan6 status` rather than relying on delegated LAN prefixes.
-   - For local subnets, ULA (`network.globals.ula_prefix`) guarantees unbroken local IPv6 routing and split-DNS resolution even when ISP prefix delegation is temporarily absent.
-8. **Upstream PPPoE WAN & Framing:**
-   - The core router connects to the upstream ISP via PPPoE (`proto 'pppoe'`).
-   - PPPoE introduces an 8-byte encapsulation overhead, constraining the WAN MTU to 1492 (compared to standard 1500 Ethernet).
-   - TCP MSS clamping (`mtu_fix '1'`) is mandatory on the `wan` firewall zone to clamp MSS to 1452 bytes, preventing silent packet drops and path MTU blackholes.
-   - The `wan6` interface binds to `@wan` (`device '@wan'`), meaning the IPv6 SLAAC/DHCPv6 protocol stack dynamically anchors to the virtual `pppoe-wan` link established by the PPPoE daemon (`pppd`).
-   - The test lab simulates this topology via a rootless userspace PPPoE Access Concentrator (`test_lab/mock_pppoe.py`) listening on QEMU's multicast WAN bus (`230.0.0.1:10001`).
+1. Zero-Python Target Execution:
+   - Target routers run OpenWrt / ImmortalWrt without Python.
+   - Never use Python-dependent Ansible modules (`template`, `copy`, `lineinfile`, `package`, `service`, `setup`).
+   - Use strictly `raw` (POSIX `/bin/sh`, `uci`, `ubus`, `awk`, `md5sum`) or `include_tasks: "{{ playbook_dir }}/tasks/deploy_template.yml"` (renders Jinja2 on localhost, streams via SSH stdin).
+2. Reset-Gated Role Model (No In-Place Role Switching):
+   - Devices belong strictly to one group: `core_routers` OR `dumb_aps`.
+   - `roles/common` stamps `{{ device_role }}` into `/etc/ansible_device_role` (persisted in `/etc/sysupgrade.conf`).
+   - `site.yml` `pre_tasks` halts with `ROLE_MISMATCH` if role disagrees. Switching roles requires `firstboot -y && reboot` then `./bootstrap_ssh.sh HOST 192.168.1.1`.
+   - No bidirectional teardown hacks. Core router `wireless_enabled` toggle is supported in-place.
+3. 3-Stage Execution & Numeric `.uci` Fragment Ordering:
+   - Roles never mutate `/etc/config/*` directly; render fragments into `/etc/ansible_uci/`:
+     - Stage 1: `10_10_common.uci`, `10_20_{core_router|dumb_ap}.uci`, `10_30_wireless.uci`. On `bootstrap_ip`, Stage 1 applies fragments immediately, switches `ansible_host` to VLAN 10 (`192.168.10.1` or `.<ap_ip_suffix>`), and waits for SSH.
+     - Stage 2 (`core_routers` only): Waits up to 40s for `ubus call network.interface.wan status` (`"up": true`) if packages missing; installs packages; renders `20_10_wireguard.uci`, `20_20_smartdns.uci`, `20_30_ddns.uci`. On offline WAN, `rescue` deletes `20_*.uci` so `dnsmasq` retains `9.9.9.9` fallback.
+     - Stage 3: Snapshots per-file `md5sum` of `/etc/config/*`, purges dynamic anonymous sections (`firewall.@{defaults,zone,forwarding,rule,redirect}`, `network.@device`, `dhcp.@{host,domain}`, `wireless.@wifi-iface`, `ddns.@service`), replays `10_*.uci` then `20_*.uci` via `uci -q batch`, commits, and restarts only services whose config MD5 changed.
+4. Dual Package Manager Support (`apk` + `opkg`):
+   - Always check `command -v apk >/dev/null 2>&1` before falling back to `opkg` (supports OpenWrt 23.05 `opkg` and 24.10+ / snapshots `apk`).
+5. Network & Firewall Segmentation:
+   - VLAN 10 (`lan`, `192.168.10.0/24`): Management + full access (includes `wg0`, `192.168.9.0/24`). Only VLAN with GUA + ULA (ISP delegates single `/64`).
+   - VLAN 20 (`lab`, `.20.0/24`): WAN + `iot` only. ULA only (`ip6class: 'local'`, `ra_default '0'`).
+   - VLAN 30 (`guest`, `.30.0/24`): WAN + `lab` only. ULA only (`ip6class: 'local'`, `ra_default '0'`).
+   - VLAN 40 (`iot`, `.40.0/24`): Isolated, no WAN. ULA only (`ip6class: 'local'`, `ra_default '0'`).
+   - VLAN 41 (`iot_pub`, `.41.0/24`): WAN only, isolated. ULA only (`ip6class: 'local'`, `ra_default '0'`).
+   - No blanket `wan -> lab` forwarding. IPv4 uses `redirect` (DNAT); IPv6 uses port `rule` with negative-netmask suffix (`::10/-64`).
+6. Split-Horizon DNS & Leak Prevention:
+   - `dnsmasq` owns port 53 (`noresolv='1'`, `localuse='1'`). Static domains with `ip6: "::"` add `server=/<fqdn>/` returning `NODATA` for AAAA/HTTPS (type 65) to prevent public Cloudflare leaks.
+   - `smartdns` runs on `127.0.0.1:5353` (`auto_set_dnsmasq='0'`) with Quad9 DoH/DoT + domain-set blocklists.
+7. Upstream ISP IPv6 Characteristics & DDNS:
+   - Single `/64` DHCPv6-PD delegation restricts public GUA to VLAN 10; other VLANs use private ULA.
+   - WAN RA SLAAC on `wan6` is stable; DHCPv6-PD prefix can be intermittent across reconnects.
+   - DDNS tracks `wan6` (`ip_source='network'`) via `ubus call network.interface.wan6 status`. Local routing/split-DNS relies on stable ULA (`network.globals.ula_prefix`).
+8. Upstream PPPoE WAN & Framing:
+   - WAN MTU 1492 due to 8-byte PPPoE encapsulation. Mandatory firewall MSS clamping (`mtu_fix '1'`, clamped to 1452).
+   - `wan6` binds to `@wan` (`device '@wan'`) over dynamic `pppoe-wan`.
+   - Simulated in test lab via rootless userspace PPPoE AC (`test_lab/mock_pppoe.py`) on multicast `230.0.0.1:10001`.
 
 ## 3. Fleet Hardware & Driver Quirks
 
-- **`router-nr3053` (Viettel NR3053 — MediaTek MT7981, `aarch64`):** Uses proprietary MediaTek SDK wireless names (`MT7981_1_1` / `phy: ra0` for 2.4 GHz, `MT7981_1_2` / `phy: rax0` for 5 GHz) and switch port names `wan`, `lan1..lan3`.
-- **`router-32x6v1` (Viettel VAP 32x6v1 — MediaTek MT7981, `aarch64`):** Shares MT7981 CPU with `router-nr3053`, but ethernet port naming and switch layout are unconfirmed (provisionally configured as `eth0..eth2`).
-- **`router-cr6606` (Xiaomi CR6606 — MediaTek MT7621, `mipsel_24kc`):** Standard `mac80211` (`radio0`, `radio1`) and `eth0..eth2`.
-- Always sanitize dynamic string identifiers (e.g., DHCP lease hostnames) with `regex_replace` before writing `uci batch` lines.
+- `router-nr3053` (Viettel NR3053 - MediaTek MT7981, `aarch64`): MediaTek SDK wifi names (`MT7981_1_1` / `phy: ra0` 2.4 GHz, `MT7981_1_2` / `phy: rax0` 5 GHz), switch ports `wan`, `lan1..lan3`.
+- `router-32x6v1` (Viettel VAP 32x6v1 - MediaTek MT7981, `aarch64`): MT7981 CPU, provisional ports `eth0..eth2`.
+- `router-cr6606` (Xiaomi CR6606 - MediaTek MT7621, `mipsel_24kc`): Standard `mac80211` (`radio0`, `radio1`), ports `eth0..eth2`.
 
-## 4. Workflow Rules
+## 4. Workflow & Hygiene Rules
 
-- Use `no_log: true` on any task handling credentials, private keys, or API tokens.
-- At the start of every session, read @PROGRESS.md to understand current task status and blockers.
-- Before finishing any coding task, update @PROGRESS.md with completed items and next steps.
-
+- Session sync: Read `PROGRESS.md` at session start; update `PROGRESS.md` before finishing tasks. Track only work progress, test verification status, and backlog; never duplicate architectural invariants or configs already documented in `AGENTS.md` or `README.md`.
+- Input sanitization: Sanitize dynamic identifiers (DHCP hostnames) with `regex_replace` before writing `uci batch`.
+- Secret hygiene: Use `no_log: true` on any task handling credentials, private keys, or API tokens.
+- Commit Message Delta Purity: Commit messages must strictly cover the net diff against `HEAD`. Never include transient scaffolding, intermediate variables, or failed/reverted experiments.
+- Documentation Parity with Git State: Documentation (`AGENTS.md`, `README.md`, `PROGRESS.md`) must reflect only the clean final state, pruning obsolete/transient details.
+- Terminal Readability: Documentation must remain fully readable in terminal pagers (`glow`, `bat`, `cat`, `less`). Avoid unescaped HTML angle brackets outside backticks, avoid bash redirection hazards in command blocks (use uppercase placeholders like `DEVICE`/`IP` or concrete examples), avoid fragile unicode glyphs (arrows, em-dashes, box drawing), and rely on terminal auto-wrapping rather than artificial hard line breaks.
+- Token Optimization: Keep `AGENTS.md` and `PROGRESS.md` concise, dense, and high-signal to minimize token consumption. Enforce strict single-responsibility across docs to prevent cross-file duplication while strictly preserving all architectural invariants, hardware quirks, and configuration details.
+- File Manifest: Store the repository file list in `TREE.md` (never in `AGENTS.md`). Read `TREE.md` when surveying repo structure without shell commands (e.g. in read-only subagents). Update `TREE.md` whenever adding, deleting, or renaming tracked files via: `git ls-files > TREE.md`

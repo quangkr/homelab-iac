@@ -12,14 +12,14 @@ Any device in `inventory.yml` can be configured as one of three roles:
 
 ## Architecture & Network Design
 
-| VLAN ID | Interface | Subnet (IPv4) | IPv6 ULA Hint | Purpose | Firewall Policy |
+| VLAN | Name | IPv4 Subnet | IPv6 ULA | Role / Purpose | Firewall Policy |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **10** | `lan` | `192.168.10.0/24` | `:10::/64` | Management & Main LAN | Full access to WAN & all VLANs |
-| **20** | `lab` | `192.168.20.0/24` | `:20::/64` | Homelab / Servers | WAN access + Port Forwards; isolated from other VLANs except IoT |
-| **30** | `guest` | `192.168.30.0/24` | `:30::/64` | Family / Guest | WAN + Lab VLAN access; isolated from Management/IoT |
-| **40** | `iot` | `192.168.40.0/24` | `:40::/64` | Local-Only IoT | Isolated from other VLANs; **no internet access** |
-| **41** | `iot_pub` | `192.168.41.0/24` | `:41::/64` | Cloud IoT | Has internet access, but isolated from other VLANs |
-| - | `wg0` | `192.168.9.0/24` | `:9::/64` | WireGuard VPN | Grouped into `lan` zone (full access) |
+| **10** | `lan` | `192.168.10.0/24` | `:10::/64` | Management & LAN | Full WAN & VLAN access |
+| **20** | `lab` | `192.168.20.0/24` | `:20::/64` | Homelab / Servers | WAN + Port Forwards; isolated |
+| **30** | `guest` | `192.168.30.0/24` | `:30::/64` | Family / Guest | WAN + Lab access; isolated |
+| **40** | `iot` | `192.168.40.0/24` | `:40::/64` | Local-Only IoT | Isolated; no WAN access |
+| **41** | `iot_pub` | `192.168.41.0/24` | `:41::/64` | Cloud IoT | WAN only; isolated from VLANs |
+| - | `wg0` | `192.168.9.0/24` | `:9::/64` | WireGuard VPN | Grouped into lan zone |
 
 ### Key Implementation Details
 
@@ -139,7 +139,7 @@ ansible-playbook site.yml --limit router-nr3053 --ask-vault-pass
 1. **Factory-reset the target device** to clear `/overlay` and `/etc/ansible_device_role`:
 
    ```bash
-   ssh root@<current_ip> "firstboot -y && reboot"
+   ssh root@ROUTER_IP "firstboot -y && reboot"
    ```
 
 2. **Update inventory and host variables:**
@@ -150,14 +150,14 @@ ansible-playbook site.yml --limit router-nr3053 --ask-vault-pass
    Connect to the reset device, set a root password if required by the image, and run:
 
    ```bash
-   ./bootstrap_ssh.sh <device> 192.168.1.1
+   ./bootstrap_ssh.sh DEVICE 192.168.1.1
    ```
 
 ## WireGuard Client Profiles
 
 Running `site.yml` against `core_routers` automatically renders ready-to-import client `.conf` files directly into the private repository at `../homelab-iac-private/ansible-router/wireguard_clients/` (keeping all private client keys outside this repository):
 
-- **Desktop import:** Import `../homelab-iac-private/ansible-router/wireguard_clients/<peer>.conf` directly into the WireGuard app.
+- **Desktop import:** Import `../homelab-iac-private/ansible-router/wireguard_clients/PEER.conf` directly into the WireGuard app.
 - **Mobile QR code:**
 
   ```bash
